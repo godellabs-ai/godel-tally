@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.local
+target
+apps/web/node_modules
+apps/web/.next
+work
+*.log
+.DS_Store
+
+apps/web/out
+apps/web/.tally-export
+dist

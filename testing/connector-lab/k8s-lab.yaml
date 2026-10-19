@@ -1,0 +1,159 @@
+# Real Kubernetes objects for the Tally agentless discovery test, plus the
+# minimally scoped read-only identity the docs specify (get,list on namespaces,
+# Deployments, StatefulSets, DaemonSets, Jobs, Services — nothing else).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-serving
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: research
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-inference
+  namespace: ml-serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ollama-inference}
+  template:
+    metadata:
+      labels: {app: ollama-inference}
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-inference
+  namespace: ml-serving
+spec:
+  selector: {app: ollama-inference}
+  ports:
+    - port: 11434
+      targetPort: 11434
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vllm-llama
+  namespace: ml-serving
+spec:
+  serviceName: vllm-llama
+  replicas: 1
+  selector:
+    matchLabels: {app: vllm-llama}
+  template:
+    metadata:
+      labels: {app: vllm-llama}
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.6.3
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama
+  namespace: ml-serving
+spec:
+  selector: {app: vllm-llama}
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: triton-edge
+  namespace: research
+spec:
+  selector:
+    matchLabels: {app: triton-edge}
+  template:
+    metadata:
+      labels: {app: triton-edge}
+    spec:
+      containers:
+        - name: triton
+          image: nvcr.io/nvidia/tritonserver:24.08-py3
+          ports:
+            - containerPort: 8000
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nightly-eval
+  namespace: research
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: eval
+          image: busybox:1.36
+          command: ["sh", "-c", "echo evaluation complete"]
+---
+# A non-AI workload: Tally must list it without inventing a runtime claim.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-web
+  namespace: research
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: billing-web}
+  template:
+    metadata:
+      labels: {app: billing-web}
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.30-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tally-discovery
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tally-discovery
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "services"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tally-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tally-discovery
+subjects:
+  - kind: ServiceAccount
+    name: tally-discovery
+    namespace: kube-system

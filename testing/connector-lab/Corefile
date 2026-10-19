@@ -1,0 +1,10 @@
+# Real recursive DNS resolver for the lab. Every container in the lab uses this as
+# its resolver, so the query log contains genuine lookups made by real software
+# (LiteLLM reaching api.openai.com / api.anthropic.com, Ollama, etc.), not
+# hand-written records.
+. {
+    log
+    errors
+    forward . 8.8.8.8 1.1.1.1
+    cache 30
+}

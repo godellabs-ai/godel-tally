@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SignedHostRequestContext",
+  "type": "object",
+  "properties": {
+    "context": {
+      "$ref": "#/$defs/HostRequestContext"
+    },
+    "signature": {
+      "$ref": "#/$defs/HostContextSignature"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "context",
+    "signature"
+  ],
+  "$defs": {
+    "HostContextSignature": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/HostSignatureAlgorithm"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "signature_base64url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "signature_base64url"
+      ]
+    },
+    "HostRequestContext": {
+      "type": "object",
+      "properties": {
+        "actor_key": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TallyCapability"
+          }
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "issuer",
+        "audience",
+        "actor_key",
+        "capabilities",
+        "correlation_id",
+        "issued_at",
+        "expires_at"
+      ]
+    },
+    "HostSignatureAlgorithm": {
+      "type": "string",
+      "enum": [
+        "ed25519"
+      ]
+    },
+    "TallyCapability": {
+      "type": "string",
+      "enum": [
+        "read_inventory",
+        "read_evidence",
+        "read_connectors",
+        "manage_connector_references",
+        "run_scanner",
+        "manage_registry",
+        "manage_local_authorization",
+        "purge_evidence"
+      ]
+    }
+  }
+}

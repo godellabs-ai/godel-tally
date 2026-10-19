@@ -1,0 +1,49 @@
+{
+  "result": [
+    {
+      "id": "11111111-2222-4333-8444-555555555555",
+      "application": {
+        "id": "openai",
+        "name": "CASB_APP_NAME_CANARY_MUST_NOT_SURVIVE"
+      },
+      "status": "healthy",
+      "is_paused": false,
+      "updated": "2026-08-13T08:00:00Z",
+      "name": "CASB_INTEGRATION_NAME_CANARY_MUST_NOT_SURVIVE",
+      "auth_method": {
+        "type": "oauth",
+        "label": "CASB_AUTH_CANARY_MUST_NOT_SURVIVE"
+      },
+      "health_details": [
+        {
+          "detail": "CASB_HEALTH_CANARY_MUST_NOT_SURVIVE"
+        }
+      ],
+      "use_cases": [
+        {
+          "id": "casb"
+        }
+      ]
+    },
+    {
+      "id": "66666666-7777-4888-8999-aaaaaaaaaaaa",
+      "application": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "status": "healthy",
+      "is_paused": true,
+      "updated": "2026-08-13T08:01:00Z",
+      "name": "Engineering Copilot"
+    }
+  ],
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result_info": {
+    "page": 1,
+    "per_page": 50,
+    "count": 2,
+    "total_count": 2
+  }
+}

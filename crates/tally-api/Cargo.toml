@@ -1,0 +1,41 @@
+[package]
+name = "tally-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = ["embedded-registry"]
+embedded-registry = []
+
+[dependencies]
+tally-config.workspace = true
+tally-core.workspace = true
+tally-connectors.workspace = true
+tally-detect.workspace = true
+tally-observation-buffer.workspace = true
+tally-registry-lib.workspace = true
+tally-resolve.workspace = true
+tally-risk.workspace = true
+tally-scanner.workspace = true
+tally-store-postgres.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

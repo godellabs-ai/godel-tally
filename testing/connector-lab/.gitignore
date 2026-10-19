@@ -1,0 +1,10 @@
+# Everything the lab generates at run time. Nothing here is source.
+certs/
+out/
+.env
+hosts.lab
+payload.json
+sa-token.txt
+k3s-ca.pem
+*.gz
+__pycache__/

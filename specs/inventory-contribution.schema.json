@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InventoryContribution",
+  "type": "object",
+  "properties": {
+    "authorization": {
+      "$ref": "#/$defs/AuthorizationStatus"
+    },
+    "confidence": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "contribution_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "display_label": {
+      "type": "string"
+    },
+    "entity": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceLinkContribution"
+      }
+    },
+    "evidence_quality": {
+      "$ref": "#/$defs/EvidenceQuality"
+    },
+    "first_seen": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "installation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "last_seen": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/Lifecycle"
+    },
+    "producer": {
+      "$ref": "#/$defs/ContributionProducer"
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InventoryRelationshipSummary"
+      }
+    },
+    "resource_path": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "surface": {
+      "$ref": "#/$defs/Surface"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "contribution_id",
+    "installation_id",
+    "entity",
+    "display_label",
+    "surface",
+    "lifecycle",
+    "authorization",
+    "evidence_quality",
+    "confidence",
+    "first_seen",
+    "last_seen",
+    "relationships",
+    "evidence",
+    "resource_path",
+    "revision"
+  ],
+  "$defs": {
+    "AuthorizationStatus": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "under_review",
+        "authorized",
+        "unauthorized",
+        "retired"
+      ]
+    },
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    },
+    "EntityKind": {
+      "type": "string",
+      "enum": [
+        "provider",
+        "product",
+        "model_family",
+        "service_endpoint",
+        "deployment",
+        "saas_tenant",
+        "pseudonymous_actor",
+        "cloud_account",
+        "cloud_resource",
+        "kubernetes_cluster",
+        "kubernetes_namespace",
+        "workload",
+        "network_asset",
+        "network_zone",
+        "organization_scope",
+        "ai_system"
+      ]
+    },
+    "EntityRef": {
+      "type": "object",
+      "properties": {
+        "entity_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "$ref": "#/$defs/EntityKind"
+        }
+      },
+      "required": [
+        "entity_id",
+        "kind"
+      ]
+    },
+    "EvidenceAvailability": {
+      "type": "string",
+      "enum": [
+        "dereferenceable",
+        "receipt_only",
+        "expired"
+      ]
+    },
+    "EvidenceLinkContribution": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/EvidenceAvailability"
+        },
+        "evidence_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "receipt_sha256": {
+          "type": "string"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "source_kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "evidence_id",
+        "observation_id",
+        "source_kind",
+        "receipt_sha256",
+        "observed_at",
+        "availability",
+        "resource_path"
+      ]
+    },
+    "EvidenceQuality": {
+      "type": "string",
+      "enum": [
+        "strong",
+        "moderate",
+        "weak",
+        "conflicted",
+        "unknown"
+      ]
+    },
+    "InventoryRelationshipSummary": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "object": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "predicate": {
+          "$ref": "#/$defs/RelationshipPredicate"
+        },
+        "relationship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "subject": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "relationship_id",
+        "subject",
+        "predicate",
+        "object",
+        "confidence",
+        "valid_from",
+        "revision"
+      ]
+    },
+    "Lifecycle": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "active",
+        "stale",
+        "retired"
+      ]
+    },
+    "RelationshipPredicate": {
+      "type": "string",
+      "enum": [
+        "contains",
+        "uses",
+        "assigned",
+        "enables",
+        "serves",
+        "address_of",
+        "owns",
+        "member_of"
+      ]
+    },
+    "Surface": {
+      "type": "string",
+      "enum": [
+        "self_hosted",
+        "external_api",
+        "assistant",
+        "embedded_saas",
+        "managed_cloud",
+        "model_hub",
+        "agent_or_mcp",
+        "unknown"
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidenceLinkContribution",
+  "type": "object",
+  "properties": {
+    "availability": {
+      "$ref": "#/$defs/EvidenceAvailability"
+    },
+    "evidence_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "observation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "$ref": "#/$defs/ContributionProducer"
+    },
+    "receipt_sha256": {
+      "type": "string"
+    },
+    "resource_path": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "source_kind": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "evidence_id",
+    "observation_id",
+    "source_kind",
+    "receipt_sha256",
+    "observed_at",
+    "availability",
+    "resource_path"
+  ],
+  "$defs": {
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    },
+    "EvidenceAvailability": {
+      "type": "string",
+      "enum": [
+        "dereferenceable",
+        "receipt_only",
+        "expired"
+      ]
+    }
+  }
+}

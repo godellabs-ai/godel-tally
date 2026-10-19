@@ -1,0 +1,983 @@
+schema_version: "1"
+version: 2026.08.5
+fingerprints:
+  - id: fingerprint.mcp.server_discover_20260728
+    ports: [3000, 4000, 8000, 8080]
+    method: post
+    request: mcp_server_discover20260728
+    path: /mcp
+    accepted_content_types: [application/json, text/event-stream]
+    max_response_bytes: 16384
+    timeout_millis: 1500
+    assertions:
+      - type: json_string_equals
+        field: jsonrpc
+        value: "2.0"
+      - type: json_array_present
+        field: result.supportedVersions
+        count_fact: protocol_version_count
+    verified_at: 2026-08-13
+    evidence:
+      - source_type: standards_body
+        url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
+        verified_at: 2026-08-13
+        reviewer: godel-tally-maintainers
+
+  - id: fingerprint.ollama.version_v1
+    ports: [11434]
+    method: get
+    path: /api/version
+    accepted_content_types: [application/json]
+    max_response_bytes: 4096
+    timeout_millis: 1500
+    assertions:
+      - type: json_string_present
+        field: version
+        fact: version
+    verified_at: 2026-08-13
+    evidence:
+      - source_type: vendor_documentation
+        url: https://docs.ollama.com/api/version
+        verified_at: 2026-08-13
+        reviewer: godel-tally-maintainers
+
+  - id: fingerprint.litellm.health_readiness_v1
+    ports: [4000]
+    method: get
+    path: /health/readiness
+    accepted_content_types: [application/json]
+    max_response_bytes: 4096
+    timeout_millis: 1500
+    # Only `status` is asserted. LiteLLM reports `db: "Not connected"` when no database is
+    # configured, and that value cannot pass the safe-fact filter, so asserting `db` would make
+    # every database-less LiteLLM proxy undetectable — the most common shadow deployment.
+    assertions:
+      - type: json_string_present
+        field: status
+        fact: readiness_status
+    verified_at: 2026-08-18
+    evidence:
+      - source_type: vendor_documentation
+        url: https://docs.litellm.ai/docs/proxy/health
+        verified_at: 2026-08-18
+        reviewer: godel-tally-maintainers
+
+  - id: fingerprint.openai_compatible.models_v1
+    ports: [4000, 8000, 8080]
+    method: get
+    path: /v1/models
+    accepted_content_types: [application/json]
+    max_response_bytes: 65536
+    timeout_millis: 1500
+    assertions:
+      - type: json_string_equals
+        field: object
+        value: list
+      - type: json_array_present
+        field: data
+        count_fact: model_count
+    verified_at: 2026-08-18
+    evidence:
+      - source_type: vendor_documentation
+        url: https://platform.openai.com/docs/api-reference/models
+        verified_at: 2026-08-18
+        reviewer: godel-tally-maintainers
+
+  - id: fingerprint.vllm.version_v1
+    ports: [8000]
+    method: get
+    path: /version
+    accepted_content_types: [application/json]
+    max_response_bytes: 4096
+    timeout_millis: 1500
+    assertions:
+      - type: json_string_present
+        field: version
+        fact: version
+    verified_at: 2026-08-18
+    evidence:
+      - source_type: vendor_documentation
+        url: https://docs.vllm.ai/en/stable/serving/online_serving/
+        verified_at: 2026-08-18
+        reviewer: godel-tally-maintainers
+
+  - id: fingerprint.triton.server_metadata_v2
+    ports: [8000]
+    method: get
+    path: /v2
+    accepted_content_types: [application/json]
+    max_response_bytes: 16384
+    timeout_millis: 1500
+    assertions:
+      - type: json_string_equals
+        field: name
+        value: triton
+      - type: json_string_present
+        field: version
+        fact: version
+      - type: json_array_present
+        field: extensions
+        count_fact: extension_count
+    verified_at: 2026-08-13
+    evidence:
+      - source_type: vendor_documentation
+        url: https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/customization_guide/inference_protocols.html
+        verified_at: 2026-08-13
+        reviewer: godel-tally-maintainers
+entries:
+  - id: provider.anthropic
+    kind: provider
+    name: Anthropic
+    categories: [ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.cloudflare
+    kind: provider
+    name: Cloudflare
+    categories: [ai_gateway_vendor, security_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.github
+    kind: provider
+    name: GitHub
+    categories: [ai_provider, developer_tools]
+    surfaces: []
+    status: active
+
+  - id: provider.google
+    kind: provider
+    name: Google
+    categories: [ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.black-forest-labs
+    kind: provider
+    name: Black Forest Labs
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.cohere
+    kind: provider
+    name: Cohere
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.deepseek
+    kind: provider
+    name: DeepSeek
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.fireworks
+    kind: provider
+    name: Fireworks AI
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.groq
+    kind: provider
+    name: GroqCloud
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.mistral
+    kind: provider
+    name: Mistral AI
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.openrouter
+    kind: provider
+    name: OpenRouter
+    categories: [ai_gateway_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.perplexity
+    kind: provider
+    name: Perplexity
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.portkey
+    kind: provider
+    name: Portkey AI Gateway
+    categories: [ai_gateway_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.replicate
+    kind: provider
+    name: Replicate
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.stability-ai
+    kind: provider
+    name: Stability AI
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.together
+    kind: provider
+    name: Together AI
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.xai
+    kind: provider
+    name: xAI
+    categories: [direct_ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.litellm
+    kind: provider
+    name: LiteLLM (BerriAI)
+    categories: [llm_gateway_vendor, runtime_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.modelcontextprotocol
+    kind: provider
+    name: Model Context Protocol Project
+    categories: [protocol_project]
+    surfaces: []
+    status: active
+
+  - id: provider.nvidia
+    kind: provider
+    name: NVIDIA
+    categories: [ai_provider, runtime_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.ollama
+    kind: provider
+    name: Ollama
+    categories: [runtime_vendor]
+    surfaces: []
+    status: active
+
+  - id: provider.openai
+    kind: provider
+    name: OpenAI
+    categories: [ai_provider]
+    surfaces: []
+    status: active
+
+  - id: provider.vllm
+    kind: provider
+    name: vLLM Project
+    categories: [runtime_vendor]
+    surfaces: []
+    status: active
+
+  - id: runtime.litellm
+    kind: runtime
+    name: LiteLLM Proxy Gateway
+    provider_ref: provider.litellm
+    categories: [llm_gateway, model_routing]
+    surfaces: [self_hosted_api]
+    facts:
+      default_port:
+        value: 4000
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.litellm.ai/docs/proxy/quick_start
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.health_readiness
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.litellm.health_readiness_v1
+        produces:
+          entity_ref: runtime.litellm
+          proof: runtime_reachable
+        confidence_bps: 7500
+        verified_at: 2026-08-18
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.litellm.ai/docs/proxy/health
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    status: experimental
+
+  - id: runtime.mcp_streamable_http
+    kind: runtime
+    name: MCP Streamable HTTP Server
+    provider_ref: provider.modelcontextprotocol
+    categories: [agent_protocol, model_context_protocol]
+    surfaces: [self_hosted_api]
+    facts:
+      protocol_version:
+        value: 2026-07-28
+        confidence_bps: 10000
+        sources:
+          - source_type: standards_body
+            url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.server_discover
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.mcp.server_discover_20260728
+        produces:
+          entity_ref: runtime.mcp_streamable_http
+          proof: runtime_reachable
+        confidence_bps: 9700
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: standards_body
+            url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: experimental
+
+  - id: runtime.ollama
+    kind: runtime
+    name: Ollama
+    provider_ref: provider.ollama
+    categories: [local_inference, model_runtime]
+    surfaces: [self_hosted_api]
+    facts:
+      default_endpoint:
+        value: http://127.0.0.1:11434/api
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.ollama.com/api/introduction
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.api.version
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.ollama.version_v1
+        produces:
+          entity_ref: runtime.ollama
+          proof: runtime_reachable
+        confidence_bps: 9800
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.ollama.com/api/version
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: runtime.openai_compatible_api
+    kind: runtime
+    name: OpenAI-Compatible Inference Endpoint
+    categories: [local_inference, openai_compatible]
+    surfaces: [self_hosted_api]
+    facts:
+      protocol_compatibility:
+        value: openai
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://platform.openai.com/docs/api-reference/models
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.openai.models
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.openai_compatible.models_v1
+        produces:
+          entity_ref: runtime.openai_compatible_api
+          proof: runtime_reachable
+        confidence_bps: 7000
+        verified_at: 2026-08-18
+        evidence:
+          - source_type: vendor_documentation
+            url: https://platform.openai.com/docs/api-reference/models
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    status: experimental
+
+  - id: runtime.triton
+    kind: runtime
+    name: NVIDIA Triton Inference Server
+    provider_ref: provider.nvidia
+    categories: [inference_server, model_runtime]
+    surfaces: [self_hosted_api]
+    facts:
+      default_http_port:
+        value: 8000
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/customization_guide/inference_protocols.html
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.server_metadata
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.triton.server_metadata_v2
+        produces:
+          entity_ref: runtime.triton
+          proof: runtime_reachable
+        confidence_bps: 9900
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/customization_guide/inference_protocols.html
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: runtime.vllm
+    kind: runtime
+    name: vLLM OpenAI-Compatible Server
+    provider_ref: provider.vllm
+    categories: [local_inference, model_runtime]
+    surfaces: [self_hosted_api]
+    facts:
+      protocol_compatibility:
+        value: openai
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.vllm.ai/en/latest/serving/openai_compatible_server/
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: scanner.version
+        type: scanner_fingerprint
+        fingerprint_ref: fingerprint.vllm.version_v1
+        produces:
+          entity_ref: runtime.vllm
+          proof: runtime_reachable
+        confidence_bps: 9000
+        verified_at: 2026-08-18
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.vllm.ai/en/stable/serving/online_serving/
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    status: experimental
+
+  - id: svc.anthropic.api
+    kind: service
+    name: Anthropic API
+    provider_ref: provider.anthropic
+    categories: [llm_api]
+    surfaces: [external_api]
+    facts:
+      service_endpoint:
+        value: api.anthropic.com
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.anthropic.com/en/docs/claude-code/corporate-proxy
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.anthropic.com
+        produces:
+          entity_ref: svc.anthropic.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.anthropic.com/en/docs/claude-code/corporate-proxy
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.cloudflare.ai_gateway
+    kind: service
+    name: Cloudflare AI Gateway
+    provider_ref: provider.cloudflare
+    categories: [ai_gateway, llm_proxy]
+    surfaces: [external_api]
+    facts:
+      service_endpoint:
+        value: gateway.ai.cloudflare.com
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://developers.cloudflare.com/ai-gateway/
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: host.gateway
+        type: host_exact
+        value: gateway.ai.cloudflare.com
+        produces:
+          entity_ref: svc.cloudflare.ai_gateway
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-18
+        evidence:
+          - source_type: vendor_documentation
+            url: https://developers.cloudflare.com/ai-gateway/
+            verified_at: 2026-08-18
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.github.copilot
+    kind: service
+    name: GitHub Copilot
+    provider_ref: provider.github
+    categories: [code_assistant, generative_ai]
+    surfaces: [developer_tool, external_api]
+    facts:
+      service_endpoint_scope:
+        value: githubcopilot.com
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://docs.github.com/en/copilot/reference/copilot-allowlist-reference
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: host.copilot_proxy
+        type: host_exact
+        value: copilot-proxy.githubusercontent.com
+        produces:
+          entity_ref: svc.github.copilot
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.github.com/en/copilot/reference/copilot-allowlist-reference
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+      - id: host.githubcopilot
+        type: host_suffix
+        value: githubcopilot.com
+        produces:
+          entity_ref: svc.github.copilot
+          proof: service_contact
+        confidence_bps: 9700
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.github.com/en/copilot/reference/copilot-allowlist-reference
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.google.gemini_api
+    kind: service
+    name: Google Gemini API
+    provider_ref: provider.google
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    facts:
+      service_endpoint:
+        value: generativelanguage.googleapis.com
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://ai.google.dev/api/all-methods
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: generativelanguage.googleapis.com
+        produces:
+          entity_ref: svc.google.gemini_api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://ai.google.dev/api/all-methods
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.openai.api
+    kind: service
+    name: OpenAI API
+    provider_ref: provider.openai
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    facts:
+      service_endpoint:
+        value: api.openai.com
+        confidence_bps: 10000
+        sources:
+          - source_type: vendor_documentation
+            url: https://platform.openai.com/docs/api-reference/models
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.openai.com
+        produces:
+          entity_ref: svc.openai.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-13
+        evidence:
+          - source_type: vendor_documentation
+            url: https://platform.openai.com/docs/api-reference/models
+            verified_at: 2026-08-13
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: app.openai.chatgpt
+    kind: product
+    name: ChatGPT
+    provider_ref: provider.openai
+    categories: [generative_ai, browser_assistant]
+    surfaces: [browser_application]
+    matchers:
+      - id: host.chatgpt
+        type: host_suffix
+        value: chatgpt.com
+        produces:
+          entity_ref: app.openai.chatgpt
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://help.openai.com/en/articles/12677804-what-is-chatgpt-faq
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+      - id: host.legacy_chat
+        type: host_exact
+        value: chat.openai.com
+        produces:
+          entity_ref: app.openai.chatgpt
+          proof: service_contact
+        confidence_bps: 9700
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: app.deepseek.chat
+    kind: product
+    name: DeepSeek Chat
+    provider_ref: provider.deepseek
+    categories: [generative_ai, browser_assistant]
+    surfaces: [browser_application]
+    matchers:
+      - id: host.chat
+        type: host_exact
+        value: chat.deepseek.com
+        produces:
+          entity_ref: app.deepseek.chat
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://api-docs.deepseek.com/news/news1210/
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.black-forest-labs.api
+    kind: service
+    name: Black Forest Labs API
+    provider_ref: provider.black-forest-labs
+    categories: [image_generation_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.bfl.ai
+        produces:
+          entity_ref: svc.black-forest-labs.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.bfl.ai/api-reference/tasks/generate-or-edit-an-image
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.cohere.api
+    kind: service
+    name: Cohere API
+    provider_ref: provider.cohere
+    categories: [llm_api, embedding_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.cohere.com
+        produces:
+          entity_ref: svc.cohere.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.cohere.com/reference/about
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.deepseek.api
+    kind: service
+    name: DeepSeek API
+    provider_ref: provider.deepseek
+    categories: [llm_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.deepseek.com
+        produces:
+          entity_ref: svc.deepseek.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://api-docs.deepseek.com/
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.fireworks.api
+    kind: service
+    name: Fireworks AI API
+    provider_ref: provider.fireworks
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.fireworks.ai
+        produces:
+          entity_ref: svc.fireworks.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.fireworks.ai/api-reference/introduction
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.groq.api
+    kind: service
+    name: GroqCloud API
+    provider_ref: provider.groq
+    categories: [llm_api, inference_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.groq.com
+        produces:
+          entity_ref: svc.groq.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://console.groq.com/docs/openai
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.mistral.api
+    kind: service
+    name: Mistral AI API
+    provider_ref: provider.mistral
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.mistral.ai
+        produces:
+          entity_ref: svc.mistral.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.mistral.ai/api/
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.openrouter.api
+    kind: service
+    name: OpenRouter API
+    provider_ref: provider.openrouter
+    categories: [ai_gateway, model_router]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: openrouter.ai
+        produces:
+          entity_ref: svc.openrouter.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://openrouter.ai/docs/quickstart
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.perplexity.api
+    kind: service
+    name: Perplexity API
+    provider_ref: provider.perplexity
+    categories: [llm_api, search_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.perplexity.ai
+        produces:
+          entity_ref: svc.perplexity.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.perplexity.ai/api-reference/chat-completions-post
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.portkey.api
+    kind: service
+    name: Portkey AI Gateway
+    provider_ref: provider.portkey
+    categories: [ai_gateway, llm_proxy]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.portkey.ai
+        produces:
+          entity_ref: svc.portkey.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://portkey.ai/docs/api-reference/inference-api/introduction
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.replicate.api
+    kind: service
+    name: Replicate API
+    provider_ref: provider.replicate
+    categories: [model_inference_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.replicate.com
+        produces:
+          entity_ref: svc.replicate.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://replicate.com/docs/reference/http
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.stability-ai.api
+    kind: service
+    name: Stability AI API
+    provider_ref: provider.stability-ai
+    categories: [image_generation_api, audio_generation_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.stability.ai
+        produces:
+          entity_ref: svc.stability-ai.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://platform.stability.ai/docs/api-reference
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.together.api
+    kind: service
+    name: Together AI API
+    provider_ref: provider.together
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.together.xyz
+        produces:
+          entity_ref: svc.together.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.together.ai/docs/openai-api-compatibility
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active
+
+  - id: svc.xai.api
+    kind: service
+    name: xAI API
+    provider_ref: provider.xai
+    categories: [llm_api, multimodal_api]
+    surfaces: [external_api]
+    matchers:
+      - id: host.api
+        type: host_exact
+        value: api.x.ai
+        produces:
+          entity_ref: svc.xai.api
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-08-26
+        evidence:
+          - source_type: vendor_documentation
+            url: https://docs.x.ai/docs/api-reference
+            verified_at: 2026-08-26
+            reviewer: godel-tally-maintainers
+    status: active

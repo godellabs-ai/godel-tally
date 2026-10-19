@@ -1,0 +1,12 @@
+title = "Gödel Tally Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known synthetic values used by negative-path fixtures"
+regexTarget = "secret"
+regexes = [
+  '''^wrong-secret$''',
+  '''^kubernetes_api_v1$''',
+]

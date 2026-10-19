@@ -1,0 +1,21 @@
+{
+  "provider": "azure",
+  "account_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "region": "eastus2",
+  "network_id": "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/tally-network/providers/Microsoft.Network/virtualNetworks/tally-vnet",
+  "records": [
+    {
+      "window_start": "2026-08-13T10:00:00Z",
+      "window_end": "2026-08-13T10:05:00Z",
+      "source_ip": "10.30.0.10",
+      "destination_ip": "10.30.0.20",
+      "source_port": 50000,
+      "destination_port": 443,
+      "protocol": "tcp",
+      "packets": 8,
+      "bytes": 2048,
+      "direction": "egress",
+      "decision": "accepted"
+    }
+  ]
+}

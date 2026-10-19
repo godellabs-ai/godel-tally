@@ -1,0 +1,32 @@
+# Real LiteLLM proxy configuration for the Tally connector lab.
+#
+# Three groups route to providers Tally maps to public registry entries
+# (openai, anthropic, gemini) and one routes to a genuinely reachable local
+# Ollama, whose "ollama" provider token Tally does NOT map — which exercises the
+# "unmapped providers are counted and discarded, never guessed" path.
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: local-qwen
+    litellm_params:
+      model: ollama/qwen2.5:0.5b
+      api_base: http://ollama:11434
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

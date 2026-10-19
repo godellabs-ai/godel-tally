@@ -1,0 +1,17 @@
+{
+  "provider": "gcp",
+  "account_id": "tally-project-1",
+  "region": "us-central1",
+  "network_id": "projects/tally-project-1/global/networks/tally-vpc",
+  "records": [
+    {
+      "valid_from": "2026-08-13T09:30:00Z",
+      "valid_until": "2026-08-13T10:30:00Z",
+      "private_ip": "10.40.0.20",
+      "interface_id": "projects/tally-project-1/zones/us-central1-a/instances/CONTENT_CANARY/interfaces/nic0",
+      "resource_id": "projects/tally-project-1/locations/us-central1/endpoints/123456789",
+      "resource_kind": "inference_endpoint",
+      "hostname": "model-host-gcp.internal"
+    }
+  ]
+}

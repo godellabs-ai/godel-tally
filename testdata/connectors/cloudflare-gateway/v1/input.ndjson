@@ -1,0 +1,2 @@
+{"Datetime":"2026-08-13T10:00:00Z","QueryID":"cf-root","QueryName":"."}
+{"Datetime":"2026-08-13T10:00:01Z","QueryID":"cf-2","QueryName":"api.anthropic.com","QueryTypeName":"AAAA","RCode":0,"ResolverDecision":"allowed","Protocol":"udp","DeviceID":"device-cf-1","DeviceName":"ULTRA_SECRET_PROMPT_CANARY","Email":"person@example.com","SrcIP":"198.51.100.8","RedirectTargetURI":"https://example.invalid/?prompt=ULTRA_SECRET_PROMPT_CANARY"}

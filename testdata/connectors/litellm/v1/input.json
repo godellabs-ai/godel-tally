@@ -1,0 +1,20 @@
+{
+  "schema_version": "litellm_model_groups_projection_v1",
+  "endpoint_ref": "https://litellm.internal.example:4000",
+  "observed_at": "2026-08-18T08:00:00Z",
+  "model_groups": [
+    {
+      "model_group": "gpt-production-routing",
+      "providers": ["openai"],
+      "mode": "sk-litellm-key-canary"
+    },
+    {
+      "model_group": "claude-production-routing",
+      "providers": ["anthropic", "bedrock"]
+    },
+    {
+      "model_group": "gemini-fallback-routing",
+      "providers": ["gemini"]
+    }
+  ]
+}

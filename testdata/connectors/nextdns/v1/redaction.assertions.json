@@ -1,0 +1,4 @@
+{
+  "must_not_contain": ["ULTRA_SECRET_PROMPT_CANARY", "Jane Laptop", "MacBook"],
+  "must_contain": ["10.0.0.2", "p1_", "source_bytes_retained\":false"]
+}

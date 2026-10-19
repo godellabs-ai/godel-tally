@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConnectorContribution",
+  "type": "object",
+  "properties": {
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConnectorManagementCapability"
+      }
+    },
+    "connector_id": {
+      "type": "string"
+    },
+    "connector_type": {
+      "type": "string"
+    },
+    "display_label": {
+      "type": "string"
+    },
+    "health": {
+      "$ref": "#/$defs/ConnectorHealth"
+    },
+    "permission_manifest_path": {
+      "type": "string"
+    },
+    "producer": {
+      "$ref": "#/$defs/ContributionProducer"
+    },
+    "resource_path": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "setup_schema_path": {
+      "type": "string"
+    },
+    "source_family": {
+      "$ref": "#/$defs/ConnectorSourceFamily"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "connector_id",
+    "connector_type",
+    "display_label",
+    "source_family",
+    "health",
+    "capabilities",
+    "setup_schema_path",
+    "permission_manifest_path",
+    "resource_path",
+    "updated_at",
+    "revision"
+  ],
+  "$defs": {
+    "ConnectorHealth": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "degraded",
+        "stale",
+        "paused",
+        "error",
+        "unknown"
+      ]
+    },
+    "ConnectorManagementCapability": {
+      "type": "string",
+      "enum": [
+        "view",
+        "configure_reference",
+        "pause",
+        "resume",
+        "retry",
+        "backfill_preview"
+      ]
+    },
+    "ConnectorSourceFamily": {
+      "type": "string",
+      "enum": [
+        "dns",
+        "secure_web_gateway",
+        "network_scanner",
+        "managed_cloud",
+        "cloud_flow",
+        "cloud_resource_mapping",
+        "casb_capability",
+        "kubernetes_api",
+        "ai_gateway",
+        "file_import"
+      ]
+    },
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    }
+  }
+}

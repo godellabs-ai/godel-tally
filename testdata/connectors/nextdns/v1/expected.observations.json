@@ -1,0 +1,17 @@
+[
+  {
+    "host": "api.openai.com",
+    "source_ip": "203.0.113.8",
+    "protocol": "dns-over-https",
+    "action": "allowed",
+    "result": "a",
+    "identity_pseudonymized": false,
+    "device_pseudonymized": true,
+    "destination_ip": null,
+    "destination_port": null,
+    "category": null,
+    "application": null,
+    "bytes_sent": null,
+    "bytes_received": null
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "foundationModels": {
+    "modelSummaries": [
+      {
+        "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+        "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+        "modelName": "ULTRA_SECRET_PROMPT_CANARY",
+        "providerName": "Anthropic",
+        "inputModalities": ["TEXT"],
+        "outputModalities": ["TEXT"],
+        "responseStreamingSupported": true,
+        "customizationsSupported": [],
+        "inferenceTypesSupported": ["ON_DEMAND", "PROVISIONED"],
+        "modelLifecycle": {"status": "ACTIVE"}
+      }
+    ],
+    "nextToken": "ULTRA_SECRET_PROMPT_CANARY"
+  },
+  "provisionedModelThroughputs": {
+    "provisionedModelSummaries": [
+      {
+        "provisionedModelArn": "arn:aws:bedrock:us-east-1:111122223333:provisioned-model/abc123def456",
+        "provisionedModelName": "ULTRA_SECRET_PROMPT_CANARY",
+        "foundationModelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+        "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+        "desiredModelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+        "modelUnits": 1,
+        "desiredModelUnits": 1,
+        "commitmentDuration": "OneMonth",
+        "commitmentExpirationTime": "2026-09-13T12:00:00Z",
+        "creationTime": "2026-08-01T12:00:00Z",
+        "lastModifiedTime": "2026-08-13T11:00:00Z",
+        "status": "InService"
+      }
+    ]
+  },
+  "agents": {
+    "agentSummaries": [
+      {
+        "agentId": "ABCDEFGHIJ",
+        "agentName": "Support triage",
+        "agentStatus": "PREPARED",
+        "foundationModel": "anthropic.claude-3-sonnet-20240229-v1:0",
+        "description": "person@example.com ULTRA_SECRET_PROMPT_CANARY",
+        "guardrailConfiguration": {"guardrailIdentifier": "private-guardrail"},
+        "latestAgentVersion": "3",
+        "updatedAt": "2026-08-13T11:30:00Z"
+      }
+    ]
+  },
+  "sagemakerEndpoints": {
+    "Endpoints": [
+      {
+        "EndpointArn": "arn:aws:sagemaker:us-east-1:111122223333:endpoint/tally-private-endpoint",
+        "EndpointName": "ULTRA_SECRET_PROMPT_CANARY",
+        "EndpointStatus": "InService",
+        "CreationTime": 1786610000,
+        "LastModifiedTime": 1786615000
+      }
+    ]
+  },
+  "sagemakerModels": {
+    "Models": [
+      {
+        "ModelArn": "arn:aws:sagemaker:us-east-1:111122223333:model/tally-private-model",
+        "ModelName": "ULTRA_SECRET_PROMPT_CANARY",
+        "CreationTime": 1786610000
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "provider": "gcp",
+  "account_id": "tally-project-1",
+  "region": "us-central1",
+  "network_id": "projects/tally-project-1/global/networks/tally-vpc",
+  "records": [
+    {
+      "window_start": "2026-08-13T10:00:00Z",
+      "window_end": "2026-08-13T10:05:00Z",
+      "source_ip": "10.40.0.10",
+      "destination_ip": "10.40.0.20",
+      "source_port": 51000,
+      "destination_port": 443,
+      "protocol": "tcp",
+      "packets": 16,
+      "bytes": 8192,
+      "direction": "egress",
+      "decision": "accepted"
+    }
+  ]
+}

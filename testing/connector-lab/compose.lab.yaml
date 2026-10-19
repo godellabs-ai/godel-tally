@@ -1,0 +1,88 @@
+# Gödel Tally connector lab.
+#
+# Everything here is a real service except `mockapi`, which serves the documented
+# Cloudflare / NextDNS response shapes because those are SaaS control planes with
+# no self-hostable server.
+name: tally-lab
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.31.77.0/24
+
+services:
+  # Real recursive resolver. Lab services use it, so its query log is genuine traffic.
+  coredns:
+    image: coredns/coredns:1.11.3
+    command: ["-conf", "/Corefile"]
+    volumes:
+      - ./Corefile:/Corefile:ro
+    networks:
+      lab:
+        ipv4_address: 172.31.77.53
+
+  # Real Ollama runtime: scanner fingerprint target and a real LiteLLM upstream.
+  ollama:
+    image: ollama/ollama:latest
+    dns: ["172.31.77.53"]
+    networks:
+      lab:
+        ipv4_address: 172.31.77.11
+    volumes:
+      - ollama-models:/root/.ollama
+
+  # Real LiteLLM AI gateway.
+  litellm:
+    image: ghcr.io/berriai/litellm-non_root:main-stable
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    dns: ["172.31.77.53"]
+    depends_on: [ollama, coredns]
+    networks:
+      lab:
+        ipv4_address: 172.31.77.12
+
+  # Real TLS terminator in front of LiteLLM: Tally refuses a plain-HTTP origin.
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+    ports:
+      - "127.0.0.78:443:443"
+    depends_on: [litellm]
+    networks:
+      lab:
+        ipv4_address: 172.31.77.13
+
+  # Vendor-shaped Cloudflare + NextDNS API over real TLS.
+  mockapi:
+    image: python:3.12-alpine
+    working_dir: /lab
+    command: ["python", "/lab/mock_vendor_api.py"]
+    environment:
+      PAYLOAD: /lab/payload.json
+      HITLOG: /lab/out/mock-hits.log
+      CERT: /lab/certs/server.pem
+      KEY: /lab/certs/server.key
+      CF_API_TOKEN: ${TALLY_CLOUDFLARE_API_TOKEN:?TALLY_CLOUDFLARE_API_TOKEN is required}
+      CF_ANALYTICS_TOKEN: ${TALLY_CLOUDFLARE_ANALYTICS_TOKEN:?TALLY_CLOUDFLARE_ANALYTICS_TOKEN is required}
+      CF_AI_GATEWAY_TOKEN: ${TALLY_CLOUDFLARE_AI_GATEWAY_TOKEN:?TALLY_CLOUDFLARE_AI_GATEWAY_TOKEN is required}
+      ND_KEY: ${TALLY_NEXTDNS_API_KEY:?TALLY_NEXTDNS_API_KEY is required}
+    volumes:
+      - .:/lab
+    ports:
+      - "127.0.0.77:443:8443"
+    networks:
+      lab:
+        ipv4_address: 172.31.77.14
+
+volumes:
+  ollama-models:

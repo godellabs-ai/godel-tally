@@ -1,0 +1,22 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/private-resource-group/providers/Microsoft.CognitiveServices/accounts/tally-ai/deployments/ULTRA_SECRET_PROMPT_CANARY",
+      "name": "ULTRA_SECRET_PROMPT_CANARY",
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "etag": "private-etag",
+      "sku": {"name": "Standard", "capacity": 1},
+      "tags": {"owner": "person@example.com", "prompt": "ULTRA_SECRET_PROMPT_CANARY"},
+      "systemData": {"createdBy": "person@example.com"},
+      "properties": {
+        "model": {"format": "OpenAI", "name": "gpt-4o", "version": "2024-11-20"},
+        "provisioningState": "Succeeded",
+        "raiPolicyName": "ULTRA_SECRET_PROMPT_CANARY",
+        "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
+        "currentCapacity": 1,
+        "capabilities": {"chatCompletion": "true"}
+      }
+    }
+  ],
+  "nextLink": "https://management.azure.com/next?token=ULTRA_SECRET_PROMPT_CANARY"
+}

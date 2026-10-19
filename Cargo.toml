@@ -1,0 +1,134 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/tallyd",
+  "apps/tally-upgrade",
+  "apps/tally-collector",
+  "apps/tally-registry",
+  "crates/tally-core",
+  "crates/tally-config",
+  "crates/tally-api",
+  "crates/tally-connectors",
+  "crates/tally-scanner",
+  "crates/tally-registry",
+  "crates/tally-detect",
+  "crates/tally-resolve",
+  "crates/tally-risk",
+  "crates/tally-provenance",
+  "crates/tally-store-postgres",
+  "crates/tally-observation-buffer",
+  "crates/tally-testkit",
+]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/godellabs-ai/godel-tally"
+authors = ["Godel Labs"]
+
+[workspace.dependencies]
+# The registry generator is part of this workspace and must compile before the
+# generated registry exists. Runtime members opt into `embedded-registry`.
+tally-api = { path = "crates/tally-api", default-features = false }
+tally-config = { path = "crates/tally-config" }
+tally-connectors = { path = "crates/tally-connectors" }
+tally-core = { path = "crates/tally-core" }
+tally-detect = { path = "crates/tally-detect" }
+tally-provenance = { path = "crates/tally-provenance" }
+tally-registry-lib = { package = "tally-registry", path = "crates/tally-registry" }
+tally-resolve = { path = "crates/tally-resolve" }
+tally-risk = { path = "crates/tally-risk" }
+tally-scanner = { path = "crates/tally-scanner" }
+tally-observation-buffer = { path = "crates/tally-observation-buffer" }
+tally-store-postgres = { path = "crates/tally-store-postgres" }
+tally-testkit = { path = "crates/tally-testkit" }
+
+anyhow = "1"
+argon2 = "0.5"
+base64 = "0.22"
+async-trait = "0.1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = "1"
+aws-sdk-bedrock = { version = "1.157.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-bedrockagent = { version = "1.147.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-cloudwatchlogs = { version = "1.152.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-sesv2 = { version = "1.122.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.148.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+aws-sdk-sts = { version = "1.116.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sigv4 = "1"
+axum = "0.8"
+azure_core = "1"
+azure_identity = "1"
+chacha20poly1305 = "0.10"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+clap = { version = "4", features = ["derive", "env"] }
+csv = "1.4.0"
+flate2 = "1"
+getrandom = "0.4"
+lettre = { version = "0.11.22", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname"] }
+gcp_auth = { version = "0.12.7", default-features = false, features = ["ring"] }
+hex = "0.4"
+hmac = "0.13"
+ipnet = { version = "2.12.0", features = ["serde"] }
+if-addrs = "0.15.0"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
+schemars = { version = "1", features = ["chrono04", "uuid1"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-saphyr = "0.0.29"
+sha2 = "0.11"
+sigstore-verify = "0.11.0"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json", "chrono", "uuid", "migrate", "macros"] }
+thiserror = "2"
+subtle = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["trace", "cors", "compression-full", "limit", "request-id"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+uuid = { version = "1", features = ["v5", "v7", "serde"] }
+url = "2"
+zstd = "0.14.0"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+
+# Keep container builds viable on memory-constrained development machines.
+# Generated AWS service crates are large enough to exhaust Docker Desktop's
+# memory during optimized code generation even when Cargo uses a single job.
+[profile.container]
+inherits = "release"
+lto = false
+codegen-units = 16
+
+[profile.container.package.aws-sdk-bedrock]
+opt-level = 0
+codegen-units = 1
+
+[profile.container.package.aws-sdk-bedrockagent]
+opt-level = 0
+codegen-units = 1
+
+[profile.container.package.aws-sdk-cloudwatchlogs]
+opt-level = 0
+codegen-units = 1
+
+[profile.container.package.aws-sdk-s3]
+opt-level = 0
+codegen-units = 1
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"

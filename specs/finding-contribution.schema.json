@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindingContribution",
+  "type": "object",
+  "properties": {
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceLinkContribution"
+      }
+    },
+    "factor_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "finding_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "policy_id": {
+      "type": "string"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "producer": {
+      "$ref": "#/$defs/ContributionProducer"
+    },
+    "resource_path": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "severity": {
+      "$ref": "#/$defs/RiskSeverity"
+    },
+    "status": {
+      "$ref": "#/$defs/FindingContributionStatus"
+    },
+    "system_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "title": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "finding_id",
+    "system_id",
+    "title",
+    "severity",
+    "status",
+    "policy_id",
+    "policy_version",
+    "factor_codes",
+    "evidence",
+    "resource_path",
+    "updated_at",
+    "revision"
+  ],
+  "$defs": {
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    },
+    "EvidenceAvailability": {
+      "type": "string",
+      "enum": [
+        "dereferenceable",
+        "receipt_only",
+        "expired"
+      ]
+    },
+    "EvidenceLinkContribution": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/EvidenceAvailability"
+        },
+        "evidence_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "receipt_sha256": {
+          "type": "string"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "source_kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "evidence_id",
+        "observation_id",
+        "source_kind",
+        "receipt_sha256",
+        "observed_at",
+        "availability",
+        "resource_path"
+      ]
+    },
+    "FindingContributionStatus": {
+      "type": "string",
+      "enum": [
+        "open",
+        "resolved",
+        "superseded"
+      ]
+    },
+    "RiskSeverity": {
+      "type": "string",
+      "enum": [
+        "informational",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    }
+  }
+}

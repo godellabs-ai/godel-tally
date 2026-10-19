@@ -1,0 +1,161 @@
+{
+  "inventory": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "contribution_id": "00000000-0000-7000-8000-000000000001",
+    "installation_id": "00000000-0000-7000-8000-000000000002",
+    "entity": {
+      "entity_id": "00000000-0000-7000-8000-000000000003",
+      "kind": "ai_system"
+    },
+    "display_label": "Vertex deployment",
+    "surface": "managed_cloud",
+    "lifecycle": "active",
+    "authorization": "under_review",
+    "evidence_quality": "strong",
+    "confidence": 9500,
+    "first_seen": "2026-08-14T09:00:00Z",
+    "last_seen": "2026-08-14T10:00:00Z",
+    "relationships": [
+      {
+        "relationship_id": "00000000-0000-7000-8000-000000000004",
+        "subject": {
+          "entity_id": "00000000-0000-7000-8000-000000000005",
+          "kind": "network_asset"
+        },
+        "predicate": "uses",
+        "object": {
+          "entity_id": "00000000-0000-7000-8000-000000000003",
+          "kind": "ai_system"
+        },
+        "confidence": 9500,
+        "valid_from": "2026-08-14T09:00:00Z",
+        "valid_until": "2026-08-14T10:00:00Z",
+        "revision": 1
+      }
+    ],
+    "evidence": [
+      {
+        "schema_version": "1.0.0-alpha.1",
+        "producer": "godel_tally",
+        "evidence_id": "00000000-0000-7000-8000-000000000006",
+        "observation_id": "00000000-0000-7000-8000-000000000007",
+        "source_kind": "cloud_flow",
+        "receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observed_at": "2026-08-14T10:00:00Z",
+        "availability": "dereferenceable",
+        "resource_path": "/api/v1/tally/evidence/00000000-0000-7000-8000-000000000006"
+      }
+    ],
+    "resource_path": "/api/v1/tally/systems/00000000-0000-7000-8000-000000000003",
+    "revision": 4
+  },
+  "connector": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "connector_id": "gcp_cloud_flow",
+    "connector_type": "gcp_cloud_flow_native",
+    "display_label": "Google Cloud VPC activity",
+    "source_family": "cloud_flow",
+    "health": "healthy",
+    "capabilities": [
+      "view",
+      "configure_reference",
+      "pause",
+      "resume",
+      "retry",
+      "backfill_preview"
+    ],
+    "setup_schema_path": "/api/v1/tally/connectors/gcp_cloud_flow/setup-schema",
+    "permission_manifest_path": "/api/v1/tally/connectors/gcp_cloud_flow/permissions",
+    "resource_path": "/api/v1/tally/connectors/gcp_cloud_flow",
+    "updated_at": "2026-08-14T10:00:00Z",
+    "revision": 2
+  },
+  "finding": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "finding_id": "00000000-0000-7000-8000-000000000008",
+    "system_id": "00000000-0000-7000-8000-000000000003",
+    "title": "Observed AI system requires authorization review",
+    "severity": "medium",
+    "status": "open",
+    "policy_id": "baseline-shadow-ai",
+    "policy_version": "1",
+    "factor_codes": [
+      "authorization_unknown",
+      "network_exchange_observed"
+    ],
+    "evidence": [
+      {
+        "schema_version": "1.0.0-alpha.1",
+        "producer": "godel_tally",
+        "evidence_id": "00000000-0000-7000-8000-000000000006",
+        "observation_id": "00000000-0000-7000-8000-000000000007",
+        "source_kind": "cloud_flow",
+        "receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observed_at": "2026-08-14T10:00:00Z",
+        "availability": "dereferenceable",
+        "resource_path": "/api/v1/tally/evidence/00000000-0000-7000-8000-000000000006"
+      }
+    ],
+    "resource_path": "/api/v1/tally/findings/00000000-0000-7000-8000-000000000008",
+    "updated_at": "2026-08-14T10:00:00Z",
+    "revision": 1
+  },
+  "evidence_link": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "evidence_id": "00000000-0000-7000-8000-000000000006",
+    "observation_id": "00000000-0000-7000-8000-000000000007",
+    "source_kind": "cloud_flow",
+    "receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observed_at": "2026-08-14T10:00:00Z",
+    "availability": "dereferenceable",
+    "resource_path": "/api/v1/tally/evidence/00000000-0000-7000-8000-000000000006"
+  },
+  "report_section": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "section_id": "ai_discovery_summary",
+    "title": "AI discovery summary",
+    "window_start": "2026-08-14T09:00:00Z",
+    "window_end": "2026-08-14T10:00:00Z",
+    "metrics": [
+      {
+        "metric_code": "systems_observed",
+        "label": "Systems observed",
+        "value": 1
+      },
+      {
+        "metric_code": "evidence_sources",
+        "label": "Evidence sources",
+        "value": 3
+      }
+    ],
+    "resource_path": "/api/v1/tally/reports/sections/ai_discovery_summary",
+    "generated_at": "2026-08-14T10:00:00Z",
+    "revision": 1
+  },
+  "host_request": {
+    "context": {
+      "schema_version": "1.0.0-alpha.1",
+      "issuer": "tally-host",
+      "audience": "godel-tally",
+      "actor_key": "host_actor:01",
+      "capabilities": [
+        "read_inventory",
+        "read_evidence",
+        "read_connectors"
+      ],
+      "correlation_id": "00000000-0000-7000-8000-000000000009",
+      "issued_at": "2026-08-14T10:00:00Z",
+      "expires_at": "2026-08-14T10:05:00Z"
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "key_id": "tally-host-context-2026-08",
+      "signature_base64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  }
+}

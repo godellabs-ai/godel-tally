@@ -1,0 +1,13 @@
+# A no-license LiteLLM fixture for a remote Tally development VM.
+# The upstream is a real local Ollama runtime; secrets are supplied as environment variables.
+model_list:
+  - model_name: tally-free-local
+    litellm_params:
+      model: ollama_chat/smollm2:135m
+      api_base: http://ollama.internal:11434
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

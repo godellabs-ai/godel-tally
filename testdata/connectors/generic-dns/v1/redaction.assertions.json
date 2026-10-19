@@ -1,0 +1,14 @@
+{
+  "forbidden_keys": [
+    "body",
+    "clipboard",
+    "command",
+    "document",
+    "message",
+    "prompt",
+    "request_body",
+    "response",
+    "source_code"
+  ],
+  "source_bytes_retained": false
+}

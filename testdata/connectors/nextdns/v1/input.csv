@@ -1,0 +1,2 @@
+timestamp,domain,query_type,dnssec,protocol,client_ip,status,reasons,destination_country,root_domain,device_id,device_name,device_model,device_local_ip,matched_name,client_name,prompt
+2026-08-13T10:00:00Z,api.openai.com,A,true,DNS-over-HTTPS,203.0.113.8,allowed,ULTRA_SECRET_PROMPT_CANARY,US,openai.com,dev-1,Jane Laptop,MacBook,10.0.0.2,api.openai.com,nextdns-ios,ULTRA_SECRET_PROMPT_CANARY

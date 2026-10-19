@@ -1,0 +1,8 @@
+# Optional Compose database access. make dev uses data-services.sh directly, also supporting Apple container.
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+  clickhouse:
+    ports:
+      - "127.0.0.1:8124:8123"

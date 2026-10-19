@@ -1,0 +1,21 @@
+{
+  "provider": "aws",
+  "account_id": "111122223333",
+  "region": "us-east-1",
+  "network_id": "vpc-0tallyprivate",
+  "records": [
+    {
+      "window_start": "2026-08-13T10:00:00Z",
+      "window_end": "2026-08-13T10:05:00Z",
+      "source_ip": "10.20.0.10",
+      "destination_ip": "10.20.0.20",
+      "source_port": 49152,
+      "destination_port": 443,
+      "protocol": "tcp",
+      "packets": 12,
+      "bytes": 4096,
+      "direction": "egress",
+      "decision": "accepted"
+    }
+  ]
+}

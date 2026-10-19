@@ -1,0 +1,4 @@
+{
+  "must_not_contain": ["ULTRA_SECRET_PROMPT_CANARY", "Research", "Jane", "/v1/chat"],
+  "must_contain": ["person@example.com", "laptop-1", "p1_", "source_bytes_retained\":false"]
+}

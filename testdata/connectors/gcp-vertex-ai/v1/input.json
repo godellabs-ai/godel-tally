@@ -1,0 +1,48 @@
+{
+  "endpoints": {
+    "endpoints": [
+      {
+        "name": "projects/tally-fixture-project/locations/us-central1/endpoints/123456789",
+        "displayName": "ULTRA_SECRET_PROMPT_CANARY",
+        "description": "person@example.com ULTRA_SECRET_PROMPT_CANARY",
+        "labels": {"secret-project-label": "ULTRA_SECRET_PROMPT_CANARY"},
+        "createTime": "2026-08-01T12:00:00Z",
+        "updateTime": "2026-08-13T11:00:00Z",
+        "etag": "private-etag",
+        "network": "projects/111/global/networks/private-network",
+        "trafficSplit": {"deployed-model-secret": 100},
+        "deployedModels": [
+          {
+            "id": "deployed-model-secret",
+            "model": "projects/tally-fixture-project/locations/us-central1/publishers/google/models/gemini-2.5-pro",
+            "displayName": "ULTRA_SECRET_PROMPT_CANARY",
+            "createTime": "2026-08-10T12:00:00Z",
+            "dedicatedResources": {"machineSpec": {"machineType": "private-machine"}},
+            "automaticResources": {"minReplicaCount": 1},
+            "serviceAccount": "person@example.com"
+          }
+        ]
+      }
+    ],
+    "nextPageToken": "ULTRA_SECRET_PROMPT_CANARY"
+  },
+  "models": {
+    "models": [
+      {
+        "name": "projects/tally-fixture-project/locations/us-central1/models/987654321@1",
+        "displayName": "ULTRA_SECRET_PROMPT_CANARY",
+        "description": "private model description",
+        "versionId": "1",
+        "versionAliases": ["default"],
+        "labels": {"secret-project-label": "ULTRA_SECRET_PROMPT_CANARY"},
+        "createTime": "2026-08-01T12:00:00Z",
+        "updateTime": "2026-08-13T11:00:00Z",
+        "metadata": {"prompt": "ULTRA_SECRET_PROMPT_CANARY"},
+        "artifactUri": "gs://private-bucket/model",
+        "containerSpec": {"imageUri": "private.registry/model:secret"},
+        "etag": "private-etag"
+      }
+    ],
+    "nextPageToken": "ULTRA_SECRET_PROMPT_CANARY"
+  }
+}

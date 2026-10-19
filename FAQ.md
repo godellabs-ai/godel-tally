@@ -1,0 +1,55 @@
+# Gödel Tally FAQ
+
+## What does Tally store?
+
+Tally stores one unique finding per governed subject and evidence kind, plus first/last use, count,
+source connector links, and optional endpoint, user, destination, and workload attribution. It does
+retain normalized AI-only telemetry in ClickHouse with configurable retention, alongside persistent
+agent inventory. Raw source payloads and non-AI logs are discarded. See [AI estate](docs/ai-estate.md).
+
+## What is a provider?
+
+A provider is the route through which a model is used. It may be a hosted API, a cloud AI platform,
+an AI gateway, or a local runtime. For example, Ollama is a provider and Llama 3.2 is a model.
+
+## How do provider and model sanctions differ?
+
+Unsanctioning a provider makes usage through that provider unsanctioned. If a model is available
+through another sanctioned provider, it may still be sanctioned there. Unsanctioning the model makes
+that model unsanctioned through every provider.
+
+## What happens to unknown AI?
+
+Observed providers and models that are not in the built-in catalog enter Authorization Queue.
+Sanctioning them moves their usage to Sanctioned; unsanctioning them moves it to Unsanctioned.
+
+## Are findings enforcement decisions?
+
+No. Findings are evidence with a governance status. An integration may use Tally decisions as policy
+input, but Tally does not claim that every unsanctioned finding must be blocked.
+
+## Where is Native Scanner?
+
+Native Scanner is available from Connectors. Its target, port, and authorization workflow remains
+visually separate inside that page so the network-safety boundary stays explicit.
+
+Only scan networks and systems you are authorized to test.
+
+## Does Tally store prompts or responses?
+
+No. Connectors may inspect bounded source fields in memory to recognize AI activity, but prompt text,
+response text, documents, arbitrary request bodies, headers, cookies, and access tokens are not part
+of the durable finding model. Sanitized operational attribution is retained only when the source
+provides it.
+
+## Can data be removed selectively?
+
+Yes. Settings can remove findings, connector history, connector configurations, scanner history,
+audit logs, or custom registry sanctions. A date cutoff is available for time-based records.
+Deletion is permanent.
+
+## Does the standalone API authenticate users?
+
+No. The standalone process binds to loopback by default and does not implement end-user
+authentication or TLS. Any shared or remote deployment must add an authenticating TLS proxy and
+network access controls.

@@ -1,0 +1,33 @@
+/target/
+/.local/
+/keys
+/keys.*
+**/node_modules/
+**/.next/
+/apps/web/next-env.d.ts
+/.venv-tally-test-ui/
+**/*.tsbuildinfo
+**/test-results/
+**/playwright-report/
+run_*.sh
+patch.py
+obs.json
+/.env
+/.env.*
+!.env.example
+*.log
+.DS_Store
+/dist/
+/coverage/
+/tmp/
+/data/
+secrets/
+*.pem
+*.key
+.idea/
+# Registry artifacts embedded by the default build are committed for clean-checkout builds.
+# Ignore only temporary files left by interrupted local generation.
+registry-data/dist/*.tmp
+
+/apps/web/out/
+/apps/web/.tally-export/

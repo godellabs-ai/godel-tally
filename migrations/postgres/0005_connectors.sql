@@ -1,0 +1,163 @@
+-- Connectors. Fresh-install schema and defaults.
+
+CREATE TABLE connector_states (
+    connector_instance_id UUID NOT NULL,
+    installation_id UUID NOT NULL,
+    connector_type TEXT NOT NULL,
+    implementation_version TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    friendly_name TEXT DEFAULT '' NOT NULL,
+    transport TEXT NOT NULL,
+    descriptor JSONB DEFAULT '{}'::JSONB NOT NULL,
+    cursor_value TEXT DEFAULT '' NOT NULL,
+    health TEXT DEFAULT 'never_run' NOT NULL,
+    last_batch_id UUID,
+    last_success_at TIMESTAMPTZ,
+    last_error_code TEXT,
+    last_poll_at TIMESTAMPTZ,
+    last_source_at TIMESTAMPTZ,
+    lag_seconds BIGINT,
+    records_read_total BIGINT DEFAULT 0 NOT NULL,
+    accepted_total BIGINT DEFAULT 0 NOT NULL,
+    ignored_total BIGINT DEFAULT 0 NOT NULL,
+    rejected_total BIGINT DEFAULT 0 NOT NULL,
+    deduplicated_total BIGINT DEFAULT 0 NOT NULL,
+    redaction_digest TEXT,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT connector_states_accepted_total_check CHECK ((accepted_total >= 0)),
+    CONSTRAINT connector_states_deduplicated_total_check CHECK ((deduplicated_total >= 0)),
+    CONSTRAINT connector_states_friendly_name_check CHECK (((friendly_name = btrim(friendly_name)) AND (length(friendly_name) <= 120))),
+    CONSTRAINT connector_states_health_check CHECK (health IN ('never_run', 'healthy', 'delayed', 'error', 'paused')),
+    CONSTRAINT connector_states_ignored_total_check CHECK ((ignored_total >= 0)),
+    CONSTRAINT connector_states_lag_seconds_check CHECK (((lag_seconds IS NULL) OR (lag_seconds >= 0))),
+    CONSTRAINT connector_states_records_read_total_check CHECK ((records_read_total >= 0)),
+    CONSTRAINT connector_states_rejected_total_check CHECK ((rejected_total >= 0)),
+    CONSTRAINT connector_states_transport_check CHECK (transport IN ('pull', 'push', 'stream', 'file', 'scanner')),
+    CONSTRAINT connector_states_pkey PRIMARY KEY (connector_instance_id),
+    CONSTRAINT connector_states_installation_id_fkey FOREIGN KEY (installation_id) REFERENCES installations(installation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE connector_jobs (
+    job_id UUID NOT NULL,
+    connector_instance_id UUID NOT NULL,
+    mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    schedule_seconds BIGINT,
+    next_run_at TIMESTAMPTZ,
+    lease_owner UUID,
+    lease_until TIMESTAMPTZ,
+    config_refs JSONB DEFAULT '{}'::JSONB NOT NULL,
+    secret_nonce BYTEA,
+    secret_ciphertext BYTEA,
+    attempt_count BIGINT DEFAULT 0 NOT NULL,
+    consecutive_failures BIGINT DEFAULT 0 NOT NULL,
+    last_started_at TIMESTAMPTZ,
+    last_finished_at TIMESTAMPTZ,
+    last_outcome TEXT,
+    last_error_code TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT connector_jobs_attempt_count_check CHECK ((attempt_count >= 0)),
+    CONSTRAINT connector_jobs_check CHECK (((secret_nonce IS NULL) = (secret_ciphertext IS NULL))),
+    CONSTRAINT connector_jobs_check1 CHECK (((lease_owner IS NULL) = (lease_until IS NULL))),
+    CONSTRAINT connector_jobs_check2 CHECK (((mode <> 'scheduled') OR (schedule_seconds IS NOT NULL))),
+    CONSTRAINT connector_jobs_config_refs_check CHECK ((jsonb_typeof(config_refs) = 'object')),
+    CONSTRAINT connector_jobs_consecutive_failures_check CHECK ((consecutive_failures >= 0)),
+    CONSTRAINT connector_jobs_last_outcome_check CHECK (((last_outcome IS NULL) OR last_outcome IN ('completed', 'duplicate', 'failed', 'cancelled'))),
+    CONSTRAINT connector_jobs_mode_check CHECK (mode IN ('one_shot', 'scheduled', 'continuous')),
+    CONSTRAINT connector_jobs_schedule_seconds_check CHECK (((schedule_seconds IS NULL) OR (schedule_seconds >= 60))),
+    CONSTRAINT connector_jobs_secret_ciphertext_check CHECK (((secret_ciphertext IS NULL) OR ((octet_length(secret_ciphertext) >= 17) AND (octet_length(secret_ciphertext) <= 65536)))),
+    CONSTRAINT connector_jobs_secret_nonce_check CHECK (((secret_nonce IS NULL) OR (octet_length(secret_nonce) = 12))),
+    CONSTRAINT connector_jobs_status_check CHECK (status IN ('enabled', 'paused')),
+    CONSTRAINT connector_jobs_connector_instance_id_key UNIQUE (connector_instance_id),
+    CONSTRAINT connector_jobs_pkey PRIMARY KEY (job_id),
+    CONSTRAINT connector_jobs_connector_instance_id_fkey FOREIGN KEY (connector_instance_id) REFERENCES connector_states(connector_instance_id) ON DELETE CASCADE
+);
+
+CREATE INDEX connector_jobs_due_idx ON connector_jobs (next_run_at, job_id) WHERE (status = 'enabled');
+
+CREATE TABLE connector_runs (
+    run_id UUID NOT NULL,
+    connector_instance_id UUID NOT NULL,
+    installation_id UUID NOT NULL,
+    connector_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL,
+    cursor_before TEXT NOT NULL,
+    cursor_after TEXT NOT NULL,
+    first_source_at TIMESTAMPTZ,
+    last_source_at TIMESTAMPTZ,
+    records_read BIGINT NOT NULL,
+    accepted BIGINT NOT NULL,
+    ignored BIGINT NOT NULL,
+    rejected BIGINT NOT NULL,
+    deduplicated BIGINT NOT NULL,
+    batch_id UUID,
+    error_code TEXT,
+    redaction_digest TEXT NOT NULL,
+    CONSTRAINT connector_runs_accepted_check CHECK ((accepted >= 0)),
+    CONSTRAINT connector_runs_check CHECK ((completed_at >= started_at)),
+    CONSTRAINT connector_runs_deduplicated_check CHECK ((deduplicated >= 0)),
+    CONSTRAINT connector_runs_ignored_check CHECK ((ignored >= 0)),
+    CONSTRAINT connector_runs_records_read_check CHECK ((records_read >= 0)),
+    CONSTRAINT connector_runs_rejected_check CHECK ((rejected >= 0)),
+    CONSTRAINT connector_runs_status_check CHECK (status IN ('completed', 'duplicate', 'failed', 'cancelled')),
+    CONSTRAINT connector_runs_pkey PRIMARY KEY (run_id),
+    CONSTRAINT connector_runs_connector_instance_id_fkey FOREIGN KEY (connector_instance_id) REFERENCES connector_states(connector_instance_id) ON DELETE CASCADE,
+    CONSTRAINT connector_runs_installation_id_fkey FOREIGN KEY (installation_id) REFERENCES installations(installation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX connector_runs_instance_time_idx ON connector_runs (connector_instance_id, completed_at DESC);
+
+CREATE TABLE connector_backfill_requests (
+    request_id UUID NOT NULL,
+    installation_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    connector_instance_id UUID NOT NULL,
+    idempotency_key UUID NOT NULL,
+    request_sha256 TEXT NOT NULL,
+    preview_digest TEXT NOT NULL,
+    lookback_seconds BIGINT NOT NULL,
+    source_kind TEXT NOT NULL,
+    cursor_was_present BOOLEAN NOT NULL,
+    scheduled_now BOOLEAN NOT NULL,
+    response JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT connector_backfill_requests_lookback_seconds_check CHECK (((lookback_seconds >= 60) AND (lookback_seconds <= 86400))),
+    CONSTRAINT connector_backfill_requests_preview_digest_check CHECK ((preview_digest ~ '^[0-9a-f]{64}$')),
+    CONSTRAINT connector_backfill_requests_request_sha256_check CHECK ((request_sha256 ~ '^[0-9a-f]{64}$')),
+    CONSTRAINT connector_backfill_requests_source_kind_check CHECK (source_kind IN ('nextdns_api', 'cloud_flow_api')),
+    CONSTRAINT connector_backfill_requests_installation_id_idempotency_key_key UNIQUE (installation_id, idempotency_key),
+    CONSTRAINT connector_backfill_requests_pkey PRIMARY KEY (request_id),
+    CONSTRAINT connector_backfill_requests_connector_instance_id_fkey FOREIGN KEY (connector_instance_id) REFERENCES connector_states(connector_instance_id) ON DELETE CASCADE,
+    CONSTRAINT connector_backfill_requests_installation_id_fkey FOREIGN KEY (installation_id) REFERENCES installations(installation_id) ON DELETE CASCADE,
+    CONSTRAINT connector_backfill_requests_job_id_fkey FOREIGN KEY (job_id) REFERENCES connector_jobs(job_id) ON DELETE CASCADE
+);
+
+CREATE INDEX connector_backfill_requests_job_created_idx ON connector_backfill_requests (job_id, created_at DESC);
+
+CREATE FUNCTION connector_job_json(input_job connector_jobs) RETURNS JSONB
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+    SELECT jsonb_build_object(
+        'job_id', input_job.job_id,
+        'connector_instance_id', input_job.connector_instance_id,
+        'mode', input_job.mode,
+        'status', input_job.status,
+        'schedule_seconds', input_job.schedule_seconds,
+        'next_run_at', input_job.next_run_at,
+        'lease_owner', input_job.lease_owner,
+        'lease_until', input_job.lease_until,
+        'config_refs', input_job.config_refs,
+        'credentials_stored', input_job.secret_ciphertext IS NOT NULL,
+        'attempt_count', input_job.attempt_count,
+        'consecutive_failures', input_job.consecutive_failures,
+        'last_started_at', input_job.last_started_at,
+        'last_finished_at', input_job.last_finished_at,
+        'last_outcome', input_job.last_outcome,
+        'last_error_code', input_job.last_error_code,
+        'created_at', input_job.created_at,
+        'updated_at', input_job.updated_at
+    );
+$$;

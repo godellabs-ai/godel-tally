@@ -1,0 +1,47 @@
+[package]
+name = "tally-collector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+tally-config.workspace = true
+tally-api = { workspace = true, features = ["embedded-registry"] }
+tally-connectors.workspace = true
+tally-core.workspace = true
+tally-store-postgres.workspace = true
+aws-config.workspace = true
+aws-credential-types.workspace = true
+aws-sdk-bedrock.workspace = true
+aws-sdk-bedrockagent.workspace = true
+aws-sdk-cloudwatchlogs.workspace = true
+aws-sdk-s3.workspace = true
+aws-sdk-sts.workspace = true
+aws-sigv4.workspace = true
+axum.workspace = true
+azure_core.workspace = true
+azure_identity.workspace = true
+chrono.workspace = true
+clap.workspace = true
+flate2.workspace = true
+gcp_auth.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+reqwest.workspace = true
+quick-xml.workspace = true
+subtle.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+url.workspace = true
+tower.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]

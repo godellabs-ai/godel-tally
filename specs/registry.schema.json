@@ -1,0 +1,490 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryBundle",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      }
+    },
+    "fingerprints": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HttpFingerprint"
+      }
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "source_sha256": {
+      "description": "SHA-256 of the canonical JSON representation of the registry source.",
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "version",
+    "source_sha256",
+    "entries"
+  ],
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "reviewer": {
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "url": {
+          "type": "string"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "url",
+        "verified_at",
+        "reviewer"
+      ]
+    },
+    "EvidenceType": {
+      "type": "string",
+      "enum": [
+        "vendor_documentation",
+        "vendor_application",
+        "standards_body",
+        "project_research"
+      ]
+    },
+    "FingerprintAssertion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "fact": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "json_string_present"
+            }
+          },
+          "required": [
+            "type",
+            "field",
+            "fact"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "json_string_equals"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "field",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "count_fact": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "json_array_present"
+            }
+          },
+          "required": [
+            "type",
+            "field",
+            "count_fact"
+          ]
+        }
+      ]
+    },
+    "HttpFingerprint": {
+      "type": "object",
+      "properties": {
+        "accepted_content_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FingerprintAssertion"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "max_response_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "method": {
+          "$ref": "#/$defs/SafeHttpMethod"
+        },
+        "path": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          }
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SafeProbeRequest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ports",
+        "method",
+        "path",
+        "accepted_content_types",
+        "max_response_bytes",
+        "timeout_millis",
+        "assertions",
+        "verified_at",
+        "evidence"
+      ]
+    },
+    "MatchProduces": {
+      "type": "object",
+      "properties": {
+        "entity_ref": {
+          "type": "string"
+        },
+        "proof": {
+          "$ref": "#/$defs/ProofKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entity_ref",
+        "proof"
+      ]
+    },
+    "Matcher": {
+      "type": "object",
+      "properties": {
+        "confidence_bps": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "produces": {
+          "$ref": "#/$defs/MatchProduces"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "host_exact"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "host_suffix"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "model_pattern"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "vendor_app_id"
+            },
+            "value": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "vendor",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fingerprint_ref": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "scanner_fingerprint"
+            }
+          },
+          "required": [
+            "type",
+            "fingerprint_ref"
+          ]
+        }
+      ],
+      "required": [
+        "id",
+        "produces",
+        "confidence_bps",
+        "verified_at",
+        "evidence"
+      ]
+    },
+    "ProofKind": {
+      "type": "string",
+      "enum": [
+        "service_contact",
+        "product_use",
+        "model_reference",
+        "runtime_reachable",
+        "artifact_provisioning"
+      ]
+    },
+    "RegistryEntry": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "facts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/RegistryFact"
+          },
+          "default": {}
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/RegistryEntryKind"
+        },
+        "matchers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Matcher"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/RegistryEntryStatus"
+        },
+        "surfaces": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "status"
+      ]
+    },
+    "RegistryEntryKind": {
+      "type": "string",
+      "enum": [
+        "provider",
+        "service",
+        "product",
+        "model_family",
+        "model_hub",
+        "runtime"
+      ]
+    },
+    "RegistryEntryStatus": {
+      "type": "string",
+      "enum": [
+        "active",
+        "deprecated",
+        "experimental"
+      ]
+    },
+    "RegistryFact": {
+      "type": "object",
+      "properties": {
+        "applies_when": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence_bps": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "recheck_after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "value": true
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "confidence_bps",
+        "sources"
+      ]
+    },
+    "SafeHttpMethod": {
+      "type": "string",
+      "enum": [
+        "get",
+        "head",
+        "options",
+        "post"
+      ]
+    },
+    "SafeProbeRequest": {
+      "type": "string",
+      "enum": [
+        "mcp_server_discover20260728"
+      ]
+    }
+  }
+}

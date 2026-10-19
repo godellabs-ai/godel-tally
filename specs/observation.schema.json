@@ -1,0 +1,1036 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation",
+  "type": "object",
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/ActorObservation"
+    },
+    "agent": {
+      "$ref": "#/$defs/AgentObservation"
+    },
+    "cloud": {
+      "$ref": "#/$defs/CloudObservation"
+    },
+    "connector": {
+      "$ref": "#/$defs/ConnectorRef"
+    },
+    "destination": {
+      "$ref": "#/$defs/DestinationObservation"
+    },
+    "installation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "$ref": "#/$defs/ObservationKind"
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkObservation"
+    },
+    "observation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "outcome": {
+      "$ref": "#/$defs/OutcomeObservation"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "saas": {
+      "$ref": "#/$defs/SaasObservation"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "service": {
+      "$ref": "#/$defs/ServiceObservation"
+    },
+    "source": {
+      "$ref": "#/$defs/EvidenceReceipt"
+    },
+    "workload": {
+      "$ref": "#/$defs/WorkloadObservation"
+    }
+  },
+  "required": [
+    "schema_version",
+    "observation_id",
+    "installation_id",
+    "observed_at",
+    "received_at",
+    "connector",
+    "kind",
+    "source"
+  ],
+  "$defs": {
+    "ActorObservation": {
+      "type": "object",
+      "properties": {
+        "additional_source_ips": {
+          "description": "Other source addresses reported for the same device, such as a LAN address alongside the\npublic egress address. Connectors retain only validated IP literals and findings de-duplicate\nthem before persistence.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "device_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hostname": {
+          "description": "Endpoint hostname when the source supplies one. Unlike `device_key`, this is retained so\noperators can locate a device that is using an AI provider or model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_client": {
+          "description": "Bounded client/framework hint and explicit source agent ID. A client hint is not proof\nthat a particular agent process exists. Raw headers and user-agent strings are discarded.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestClientObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkloadObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "AgentObservation": {
+      "description": "Allowlisted agent metadata. Command lines are inspected transiently; only a recognized\nexecutable/package signature is retained, never arbitrary arguments or source content.",
+      "type": "object",
+      "properties": {
+        "attribution_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attribution_confidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory_object_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_process_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CloudLifecycleState": {
+      "type": "string",
+      "enum": [
+        "provisioning",
+        "active",
+        "updating",
+        "failed",
+        "deleting",
+        "deleted",
+        "unknown"
+      ]
+    },
+    "CloudObservation": {
+      "type": "object",
+      "properties": {
+        "account_key": {
+          "description": "Installation-local pseudonym for a provider account, subscription, or project account.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudLifecycleState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudProvider"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider_service": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudProviderService"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "region": {
+          "description": "Provider-controlled region token. Connectors reject arbitrary or user-controlled values.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_key": {
+          "description": "Installation-local pseudonym derived from the provider-native resource identifier.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudResourceKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope_key": {
+          "description": "Installation-local pseudonym for the containing subscription, project, or account scope.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usage_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CloudUsageKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "CloudProvider": {
+      "type": "string",
+      "enum": [
+        "aws",
+        "azure",
+        "gcp"
+      ]
+    },
+    "CloudProviderService": {
+      "type": "string",
+      "enum": [
+        "aws_bedrock",
+        "aws_sagemaker",
+        "azure_openai",
+        "azure_ai_foundry",
+        "gcp_vertex_ai"
+      ]
+    },
+    "CloudResourceKind": {
+      "type": "string",
+      "enum": [
+        "organization_scope",
+        "account_scope",
+        "foundation_model",
+        "model_artifact",
+        "model_deployment",
+        "inference_endpoint",
+        "agent",
+        "knowledge_base",
+        "network_interface",
+        "workload"
+      ]
+    },
+    "CloudUsageKind": {
+      "type": "string",
+      "enum": [
+        "invocation",
+        "control_plane",
+        "network_flow"
+      ]
+    },
+    "ConnectorRef": {
+      "type": "object",
+      "properties": {
+        "connector_type": {
+          "type": "string"
+        },
+        "implementation_version": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_lineage_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "instance_id",
+        "connector_type",
+        "implementation_version"
+      ]
+    },
+    "DestinationObservation": {
+      "type": "object",
+      "properties": {
+        "cloud_resource_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path_prefix": {
+          "description": "A registry-approved static prefix only; never a full path, query, or fragment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      }
+    },
+    "DigestAlgorithm": {
+      "type": "string",
+      "enum": [
+        "sha256",
+        "blake3"
+      ]
+    },
+    "EvidenceReceipt": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "location_hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_record_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "external_pointer"
+            }
+          },
+          "required": [
+            "type",
+            "source_record_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "$ref": "#/$defs/DigestAlgorithm"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "record_digest"
+            }
+          },
+          "required": [
+            "type",
+            "algorithm",
+            "digest"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "canonical_record_digest": {
+              "type": "string"
+            },
+            "checkpoint": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "checkpoint_digest"
+            }
+          },
+          "required": [
+            "type",
+            "checkpoint",
+            "canonical_record_digest"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "probe_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "transcript_digest": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "scanner_transcript_digest"
+            }
+          },
+          "required": [
+            "type",
+            "probe_id",
+            "transcript_digest"
+          ]
+        }
+      ]
+    },
+    "FlowDirection": {
+      "type": "string",
+      "enum": [
+        "ingress",
+        "egress",
+        "lateral",
+        "unknown"
+      ]
+    },
+    "IdentityAuthority": {
+      "type": "string",
+      "enum": [
+        "source_native",
+        "gate_correlation",
+        "cloud_iam",
+        "local_operator"
+      ]
+    },
+    "IdentityObservation": {
+      "type": "object",
+      "properties": {
+        "application_key": {
+          "description": "Installation-local pseudonym for the application, when the activity is app-scoped.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authority": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityAuthority"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directory_key": {
+          "description": "Installation-local pseudonym for the source directory, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display_label": {
+          "description": "Reserved for explicit operator metadata. Source-provided names are not copied here.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "description": "Endpoint user email when the connector supplies one. This is retained for findings so an\noperator can contact the user responsible for the observed usage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_subject": {
+          "description": "Bounded source-native identity when the source does not report an email address. This may\nbe a login name or an immutable provider user ID and is retained so an operator can resolve\nthe responsible user in the source system.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_subject_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentitySubjectKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject_key": {
+          "description": "Installation-local pseudonymous key by default.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject_key"
+      ]
+    },
+    "IdentitySubjectKind": {
+      "type": "string",
+      "enum": [
+        "user_name",
+        "source_user_id"
+      ]
+    },
+    "NetworkObservation": {
+      "type": "object",
+      "properties": {
+        "bytes_received": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "bytes_sent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "destination_endpoint_key": {
+          "description": "Installation-local pseudonym for the destination address within its provider network.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mapped_resource_key": {
+          "description": "Mapping-only: installation-local pseudonym matching managed-cloud inventory resource keys.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network_key": {
+          "description": "Installation-local pseudonym for the provider network/VPC/VNet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "packets": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "source_endpoint_key": {
+          "description": "Installation-local pseudonym for the source address within its provider network.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "valid_until": {
+          "description": "End of a source-authoritative flow or mapping validity window.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "ObservationKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "dns_query",
+            "http_metadata",
+            "network_flow",
+            "network_mapping",
+            "scan_fingerprint",
+            "cloud_resource",
+            "cloud_usage",
+            "saas_capability",
+            "kubernetes_resource",
+            "registry_pull",
+            "connector_health"
+          ]
+        },
+        {
+          "description": "Metadata from an instrumented agent runtime, without prompts or tool content.",
+          "type": "string",
+          "const": "agent_activity"
+        }
+      ]
+    },
+    "OutcomeObservation": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "response_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "RequestClientKind": {
+      "description": "Allowlisted public client/framework names, never arbitrary user-agent text.",
+      "type": "string",
+      "enum": [
+        "langchain",
+        "langgraph",
+        "opencode",
+        "cursor",
+        "claude_code",
+        "codex",
+        "openai_python",
+        "openai_node",
+        "curl"
+      ]
+    },
+    "RequestClientObservation": {
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestClientKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SaasCapabilityState": {
+      "type": "string",
+      "enum": [
+        "enabled",
+        "disabled",
+        "paused",
+        "unknown"
+      ]
+    },
+    "SaasObservation": {
+      "type": "object",
+      "properties": {
+        "application_key": {
+          "description": "Installation-local pseudonym for the source integration/application instance.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capability_state": {
+          "description": "Bounded source-native capability state. This proves configuration, never user activity.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SaasCapabilityState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sanction_status": {
+          "description": "Source-native sanction metadata. Tally does not author or enforce this state.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SaasSanctionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tenant_key": {
+          "description": "Installation-local pseudonym for the source CASB account or tenant boundary.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SaasSanctionStatus": {
+      "type": "string",
+      "enum": [
+        "sanctioned",
+        "unsanctioned",
+        "monitored",
+        "unknown"
+      ]
+    },
+    "ServiceObservation": {
+      "type": "object",
+      "properties": {
+        "ai_request": {
+          "description": "True only when a connector recognized a bounded AI inference request signature while\nnormalizing transient HTTP metadata or content. Raw paths, bodies, headers, prompts, and\nresponses are never retained to prove this bit.",
+          "type": "boolean"
+        },
+        "ai_request_evaluated": {
+          "description": "True when HTTP path or body material was available and a connector completed the bounded\nAI request signature check. A checked regular request must not be admitted solely because\nits hostname belongs to a known provider.",
+          "type": "boolean"
+        },
+        "declared_model_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scanner_fingerprint_id": {
+          "description": "Registry-controlled identifier for a matched, benign scanner fingerprint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tls_certificate_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tls_server_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vendor_application_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "WorkloadKind": {
+      "type": "string",
+      "enum": [
+        "deployment",
+        "stateful_set",
+        "daemon_set",
+        "job",
+        "cron_job",
+        "pod",
+        "service",
+        "node"
+      ]
+    },
+    "WorkloadObservation": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "description": "Deprecated wire compatibility field. If present, the value must already be an\ninstallation-local pseudonym; connectors must never place a raw provider account ID here.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "account_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cluster_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "namespace": {
+          "description": "Deprecated wire compatibility field. If present, the value must already be an\ninstallation-local pseudonym.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "namespace_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "namespace_name": {
+          "description": "Validated Kubernetes namespace name retained so operators can locate and remediate the\nworkload. This is never populated from labels, annotations, or workload content.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network_id": {
+          "description": "Deprecated wire compatibility field. If present, the value must already be an\ninstallation-local pseudonym.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime_image": {
+          "description": "Exact bounded container image reference for the single allowlisted AI runtime matched in\nthis workload. Unrelated sidecar images are discarded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime_registry_entry_id": {
+          "description": "Registry-controlled public runtime identifier matched in memory from resource metadata.\nLabels and annotations are never copied here.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workload_id": {
+          "description": "Deprecated wire compatibility field. If present, the value must already be an\ninstallation-local pseudonym.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workload_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workload_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkloadKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workload_name": {
+          "description": "Validated Kubernetes object name retained so operators can locate and remediate the\nworkload discovered by a read-only Kubernetes connector.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

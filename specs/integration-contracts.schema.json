@@ -1,0 +1,699 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IntegrationContractBundle",
+  "type": "object",
+  "properties": {
+    "connector": {
+      "$ref": "#/$defs/ConnectorContribution"
+    },
+    "evidence_link": {
+      "$ref": "#/$defs/EvidenceLinkContribution"
+    },
+    "finding": {
+      "$ref": "#/$defs/FindingContribution"
+    },
+    "host_request": {
+      "$ref": "#/$defs/SignedHostRequestContext"
+    },
+    "inventory": {
+      "$ref": "#/$defs/InventoryContribution"
+    },
+    "report_section": {
+      "$ref": "#/$defs/ReportSectionContribution"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "inventory",
+    "connector",
+    "finding",
+    "evidence_link",
+    "report_section",
+    "host_request"
+  ],
+  "$defs": {
+    "AuthorizationStatus": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "under_review",
+        "authorized",
+        "unauthorized",
+        "retired"
+      ]
+    },
+    "ConnectorContribution": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConnectorManagementCapability"
+          }
+        },
+        "connector_id": {
+          "type": "string"
+        },
+        "connector_type": {
+          "type": "string"
+        },
+        "display_label": {
+          "type": "string"
+        },
+        "health": {
+          "$ref": "#/$defs/ConnectorHealth"
+        },
+        "permission_manifest_path": {
+          "type": "string"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "setup_schema_path": {
+          "type": "string"
+        },
+        "source_family": {
+          "$ref": "#/$defs/ConnectorSourceFamily"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "connector_id",
+        "connector_type",
+        "display_label",
+        "source_family",
+        "health",
+        "capabilities",
+        "setup_schema_path",
+        "permission_manifest_path",
+        "resource_path",
+        "updated_at",
+        "revision"
+      ]
+    },
+    "ConnectorHealth": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "degraded",
+        "stale",
+        "paused",
+        "error",
+        "unknown"
+      ]
+    },
+    "ConnectorManagementCapability": {
+      "type": "string",
+      "enum": [
+        "view",
+        "configure_reference",
+        "pause",
+        "resume",
+        "retry",
+        "backfill_preview"
+      ]
+    },
+    "ConnectorSourceFamily": {
+      "type": "string",
+      "enum": [
+        "dns",
+        "secure_web_gateway",
+        "network_scanner",
+        "managed_cloud",
+        "cloud_flow",
+        "cloud_resource_mapping",
+        "casb_capability",
+        "kubernetes_api",
+        "ai_gateway",
+        "file_import"
+      ]
+    },
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    },
+    "EntityKind": {
+      "type": "string",
+      "enum": [
+        "provider",
+        "product",
+        "model_family",
+        "service_endpoint",
+        "deployment",
+        "saas_tenant",
+        "pseudonymous_actor",
+        "cloud_account",
+        "cloud_resource",
+        "kubernetes_cluster",
+        "kubernetes_namespace",
+        "workload",
+        "network_asset",
+        "network_zone",
+        "organization_scope",
+        "ai_system"
+      ]
+    },
+    "EntityRef": {
+      "type": "object",
+      "properties": {
+        "entity_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "$ref": "#/$defs/EntityKind"
+        }
+      },
+      "required": [
+        "entity_id",
+        "kind"
+      ]
+    },
+    "EvidenceAvailability": {
+      "type": "string",
+      "enum": [
+        "dereferenceable",
+        "receipt_only",
+        "expired"
+      ]
+    },
+    "EvidenceLinkContribution": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/EvidenceAvailability"
+        },
+        "evidence_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "receipt_sha256": {
+          "type": "string"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "source_kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "evidence_id",
+        "observation_id",
+        "source_kind",
+        "receipt_sha256",
+        "observed_at",
+        "availability",
+        "resource_path"
+      ]
+    },
+    "EvidenceQuality": {
+      "type": "string",
+      "enum": [
+        "strong",
+        "moderate",
+        "weak",
+        "conflicted",
+        "unknown"
+      ]
+    },
+    "FindingContribution": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceLinkContribution"
+          }
+        },
+        "factor_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "finding_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "policy_id": {
+          "type": "string"
+        },
+        "policy_version": {
+          "type": "string"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/RiskSeverity"
+        },
+        "status": {
+          "$ref": "#/$defs/FindingContributionStatus"
+        },
+        "system_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "finding_id",
+        "system_id",
+        "title",
+        "severity",
+        "status",
+        "policy_id",
+        "policy_version",
+        "factor_codes",
+        "evidence",
+        "resource_path",
+        "updated_at",
+        "revision"
+      ]
+    },
+    "FindingContributionStatus": {
+      "type": "string",
+      "enum": [
+        "open",
+        "resolved",
+        "superseded"
+      ]
+    },
+    "HostContextSignature": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/HostSignatureAlgorithm"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "signature_base64url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "signature_base64url"
+      ]
+    },
+    "HostRequestContext": {
+      "type": "object",
+      "properties": {
+        "actor_key": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TallyCapability"
+          }
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "issuer",
+        "audience",
+        "actor_key",
+        "capabilities",
+        "correlation_id",
+        "issued_at",
+        "expires_at"
+      ]
+    },
+    "HostSignatureAlgorithm": {
+      "type": "string",
+      "enum": [
+        "ed25519"
+      ]
+    },
+    "InventoryContribution": {
+      "type": "object",
+      "properties": {
+        "authorization": {
+          "$ref": "#/$defs/AuthorizationStatus"
+        },
+        "confidence": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "contribution_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "display_label": {
+          "type": "string"
+        },
+        "entity": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceLinkContribution"
+          }
+        },
+        "evidence_quality": {
+          "$ref": "#/$defs/EvidenceQuality"
+        },
+        "first_seen": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "installation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InventoryRelationshipSummary"
+          }
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "contribution_id",
+        "installation_id",
+        "entity",
+        "display_label",
+        "surface",
+        "lifecycle",
+        "authorization",
+        "evidence_quality",
+        "confidence",
+        "first_seen",
+        "last_seen",
+        "relationships",
+        "evidence",
+        "resource_path",
+        "revision"
+      ]
+    },
+    "InventoryRelationshipSummary": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "object": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "predicate": {
+          "$ref": "#/$defs/RelationshipPredicate"
+        },
+        "relationship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "subject": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "relationship_id",
+        "subject",
+        "predicate",
+        "object",
+        "confidence",
+        "valid_from",
+        "revision"
+      ]
+    },
+    "Lifecycle": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "active",
+        "stale",
+        "retired"
+      ]
+    },
+    "RelationshipPredicate": {
+      "type": "string",
+      "enum": [
+        "contains",
+        "uses",
+        "assigned",
+        "enables",
+        "serves",
+        "address_of",
+        "owns",
+        "member_of"
+      ]
+    },
+    "ReportMetricContribution": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "metric_code": {
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "metric_code",
+        "label",
+        "value"
+      ]
+    },
+    "ReportSectionContribution": {
+      "type": "object",
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReportMetricContribution"
+          }
+        },
+        "producer": {
+          "$ref": "#/$defs/ContributionProducer"
+        },
+        "resource_path": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "section_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "window_start": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "producer",
+        "section_id",
+        "title",
+        "window_start",
+        "window_end",
+        "metrics",
+        "resource_path",
+        "generated_at",
+        "revision"
+      ]
+    },
+    "RiskSeverity": {
+      "type": "string",
+      "enum": [
+        "informational",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "SignedHostRequestContext": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/HostRequestContext"
+        },
+        "signature": {
+          "$ref": "#/$defs/HostContextSignature"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "signature"
+      ]
+    },
+    "Surface": {
+      "type": "string",
+      "enum": [
+        "self_hosted",
+        "external_api",
+        "assistant",
+        "embedded_saas",
+        "managed_cloud",
+        "model_hub",
+        "agent_or_mcp",
+        "unknown"
+      ]
+    },
+    "TallyCapability": {
+      "type": "string",
+      "enum": [
+        "read_inventory",
+        "read_evidence",
+        "read_connectors",
+        "manage_connector_references",
+        "run_scanner",
+        "manage_registry",
+        "manage_local_authorization",
+        "purge_evidence"
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "cloudflare_ai_gateway_projection_v1",
+  "account_ref": "aigw-account-canary-0123456789abcdef",
+  "observed_at": "2026-08-18T08:00:00Z",
+  "gateways": [
+    {
+      "id": "AIGW_GATEWAY_NAME_CANARY_MUST_NOT_SURVIVE",
+      "providers": [
+        { "provider": "openai", "request_count": 42 },
+        { "provider": "workers-ai", "request_count": 7 }
+      ]
+    },
+    {
+      "id": "production-claude-gateway",
+      "providers": [{ "provider": "anthropic", "request_count": 9 }]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": "kubernetes_api_discovery_projection_v1",
+  "cluster_uid": "cluster-production-canary",
+  "observed_at": "2026-08-13T08:05:00Z",
+  "resources": [
+    {
+      "uid": "deployment-ollama-canary",
+      "namespace_uid": "namespace-ai-canary",
+      "kind": "deployment",
+      "images": ["docker.io/ollama/ollama:0.11.2"],
+      "name": "K8S_WORKLOAD_NAME_CANARY_MUST_NOT_SURVIVE",
+      "labels": {
+        "owner": "K8S_LABEL_CANARY_MUST_NOT_SURVIVE"
+      },
+      "annotations": {
+        "description": "K8S_ANNOTATION_CANARY_MUST_NOT_SURVIVE"
+      }
+    },
+    {
+      "uid": "service-ollama-canary",
+      "namespace_uid": "namespace-ai-canary",
+      "kind": "service",
+      "images": [],
+      "service_ip": "10.96.14.34",
+      "name": "ollama-api"
+    },
+    {
+      "uid": "pod-ollama-canary",
+      "namespace_uid": "namespace-ai-canary",
+      "kind": "pod",
+      "images": ["docker.io/ollama/ollama:0.11.2"],
+      "hostname": "AI-WORKER-01.INTERNAL",
+      "name": "K8S_POD_NAME_CANARY_MUST_NOT_SURVIVE"
+    },
+    {
+      "uid": "deployment-unrelated-canary",
+      "namespace_uid": "namespace-apps-canary",
+      "kind": "deployment",
+      "images": ["registry.internal.example/orders:v42"],
+      "name": "orders-api"
+    }
+  ]
+}

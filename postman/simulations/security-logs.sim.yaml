@@ -1,0 +1,5 @@
+simulation: security-logs
+routing: header
+mocks:
+  - routeKey: security-logs
+    path: ../mocks/security-logs/config.yaml

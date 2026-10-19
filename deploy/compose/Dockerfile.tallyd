@@ -1,0 +1,29 @@
+FROM node:24-bookworm-slim AS web
+WORKDIR /src/apps/web
+COPY apps/web/package*.json ./
+RUN npm ci
+COPY apps/web/ ./
+RUN npm run build
+
+FROM rust:1.99.0-trixie AS builder
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS
+WORKDIR /src
+COPY . .
+COPY --from=web /src/apps/web/out ./apps/web/out
+RUN cargo run --locked -p tally-registry-cli -- build \
+      --source registry-data/source --output registry-data/dist \
+    && cargo build --locked --profile container -p tallyd --features embedded-ui
+
+FROM debian:trixie-slim
+LABEL org.opencontainers.image.source="https://github.com/godellabs-ai/godel-tally" \
+      org.opencontainers.image.licenses="Apache-2.0"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir /data && chown 65532:65532 /data
+COPY --from=builder /src/target/container/tallyd /usr/local/bin/tallyd
+WORKDIR /data
+USER 65532:65532
+EXPOSE 8443
+ENTRYPOINT ["tallyd"]

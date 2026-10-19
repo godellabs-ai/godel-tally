@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryOverlay",
+  "type": "object",
+  "properties": {
+    "additions": {
+      "description": "Installation-local entries appended to the signed base without modifying its bytes.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      }
+    },
+    "disabled_matchers": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MatcherRef"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RegistryEntryOverride"
+      }
+    },
+    "id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id"
+  ],
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "reviewer": {
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "url": {
+          "type": "string"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "url",
+        "verified_at",
+        "reviewer"
+      ]
+    },
+    "EvidenceType": {
+      "type": "string",
+      "enum": [
+        "vendor_documentation",
+        "vendor_application",
+        "standards_body",
+        "project_research"
+      ]
+    },
+    "MatchProduces": {
+      "type": "object",
+      "properties": {
+        "entity_ref": {
+          "type": "string"
+        },
+        "proof": {
+          "$ref": "#/$defs/ProofKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entity_ref",
+        "proof"
+      ]
+    },
+    "Matcher": {
+      "type": "object",
+      "properties": {
+        "confidence_bps": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "produces": {
+          "$ref": "#/$defs/MatchProduces"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "host_exact"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "host_suffix"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "model_pattern"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "vendor_app_id"
+            },
+            "value": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "vendor",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fingerprint_ref": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "scanner_fingerprint"
+            }
+          },
+          "required": [
+            "type",
+            "fingerprint_ref"
+          ]
+        }
+      ],
+      "required": [
+        "id",
+        "produces",
+        "confidence_bps",
+        "verified_at",
+        "evidence"
+      ]
+    },
+    "MatcherRef": {
+      "type": "object",
+      "properties": {
+        "entry_id": {
+          "type": "string"
+        },
+        "matcher_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entry_id",
+        "matcher_id"
+      ]
+    },
+    "ProofKind": {
+      "type": "string",
+      "enum": [
+        "service_contact",
+        "product_use",
+        "model_reference",
+        "runtime_reachable",
+        "artifact_provisioning"
+      ]
+    },
+    "RegistryEntry": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "facts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/RegistryFact"
+          },
+          "default": {}
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/RegistryEntryKind"
+        },
+        "matchers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Matcher"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/RegistryEntryStatus"
+        },
+        "surfaces": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "status"
+      ]
+    },
+    "RegistryEntryKind": {
+      "type": "string",
+      "enum": [
+        "provider",
+        "service",
+        "product",
+        "model_family",
+        "model_hub",
+        "runtime"
+      ]
+    },
+    "RegistryEntryOverride": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "facts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/RegistryFact"
+          },
+          "default": {}
+        },
+        "id": {
+          "type": "string"
+        },
+        "matchers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Matcher"
+          }
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surfaces": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "RegistryEntryStatus": {
+      "type": "string",
+      "enum": [
+        "active",
+        "deprecated",
+        "experimental"
+      ]
+    },
+    "RegistryFact": {
+      "type": "object",
+      "properties": {
+        "applies_when": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence_bps": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "recheck_after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "value": true
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "confidence_bps",
+        "sources"
+      ]
+    }
+  }
+}

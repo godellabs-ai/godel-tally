@@ -1,0 +1,18 @@
+# Single public entry point for the Tally console.
+#
+# Serving the console and the API from one origin means the browser's direct
+# API calls (Discover, resolution, connector actions) are same-origin, so no
+# CORS is needed and tallyd itself stays bound to loopback.
+{
+    admin off
+    auto_https off
+}
+
+:3100 {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:18788
+    }
+    handle {
+        reverse_proxy 127.0.0.1:3003
+    }
+}

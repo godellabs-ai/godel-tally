@@ -1,0 +1,9 @@
+simulation: managed-agents
+routing: path
+mocks:
+  - routeKey: openai
+    path: ../mocks/managed-agents/openai.js
+  - routeKey: claude
+    path: ../mocks/managed-agents/claude.js
+  - routeKey: gemini
+    path: ../mocks/managed-agents/gemini.js

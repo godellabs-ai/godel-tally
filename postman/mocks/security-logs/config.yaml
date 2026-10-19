@@ -1,0 +1,6 @@
+version: 1
+name: Security log APIs
+interceptRequests: true
+scenarios:
+  - name: default
+    path: default.js

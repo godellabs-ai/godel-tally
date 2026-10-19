@@ -1,0 +1,17 @@
+{
+  "provider": "azure",
+  "account_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "region": "eastus2",
+  "network_id": "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/tally-network/providers/Microsoft.Network/virtualNetworks/tally-vnet",
+  "records": [
+    {
+      "valid_from": "2026-08-13T09:30:00Z",
+      "valid_until": "2026-08-13T10:30:00Z",
+      "private_ip": "10.30.0.20",
+      "interface_id": "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/tally-network/providers/Microsoft.Network/networkInterfaces/CONTENT_CANARY",
+      "resource_id": "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/tally/providers/Microsoft.CognitiveServices/accounts/tally-ai/deployments/production-gpt4o",
+      "resource_kind": "model_deployment",
+      "hostname": "model-host-azure.internal"
+    }
+  ]
+}

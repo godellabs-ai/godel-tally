@@ -1,0 +1,17 @@
+[
+  {
+    "host": "api.anthropic.com",
+    "source_ip": "198.51.100.8",
+    "protocol": "udp",
+    "action": "allowed",
+    "result": "0",
+    "identity_pseudonymized": true,
+    "device_pseudonymized": true,
+    "destination_ip": null,
+    "destination_port": null,
+    "category": null,
+    "application": null,
+    "bytes_sent": null,
+    "bytes_received": null
+  }
+]

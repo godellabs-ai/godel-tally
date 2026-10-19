@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReportSectionContribution",
+  "type": "object",
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportMetricContribution"
+      }
+    },
+    "producer": {
+      "$ref": "#/$defs/ContributionProducer"
+    },
+    "resource_path": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "section_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "window_end": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "section_id",
+    "title",
+    "window_start",
+    "window_end",
+    "metrics",
+    "resource_path",
+    "generated_at",
+    "revision"
+  ],
+  "$defs": {
+    "ContributionProducer": {
+      "type": "string",
+      "enum": [
+        "godel_tally"
+      ]
+    },
+    "ReportMetricContribution": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "metric_code": {
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "metric_code",
+        "label",
+        "value"
+      ]
+    }
+  }
+}

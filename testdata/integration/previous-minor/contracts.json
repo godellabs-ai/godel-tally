@@ -1,0 +1,101 @@
+{
+  "inventory": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "contribution_id": "00000000-0000-7000-8000-000000000101",
+    "installation_id": "00000000-0000-7000-8000-000000000102",
+    "entity": {
+      "entity_id": "00000000-0000-7000-8000-000000000103",
+      "kind": "ai_system"
+    },
+    "display_label": "Previous compatible system",
+    "surface": "external_api",
+    "lifecycle": "active",
+    "authorization": "under_review",
+    "evidence_quality": "moderate",
+    "confidence": 8000,
+    "first_seen": "2026-08-14T09:00:00Z",
+    "last_seen": "2026-08-14T10:00:00Z",
+    "relationships": [],
+    "evidence": [],
+    "resource_path": "/api/v1/tally/systems/00000000-0000-7000-8000-000000000103",
+    "revision": 1
+  },
+  "connector": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "connector_id": "previous_dns_source",
+    "connector_type": "generic_dns_v1",
+    "display_label": "Previous compatible DNS source",
+    "source_family": "dns",
+    "health": "healthy",
+    "capabilities": ["view"],
+    "setup_schema_path": "/api/v1/tally/connectors",
+    "permission_manifest_path": "/api/v1/tally/connectors",
+    "resource_path": "/api/v1/tally/connectors",
+    "updated_at": "2026-08-14T10:00:00Z",
+    "revision": 1
+  },
+  "finding": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "finding_id": "00000000-0000-7000-8000-000000000104",
+    "system_id": "00000000-0000-7000-8000-000000000103",
+    "title": "Discovery evidence needs review",
+    "severity": "low",
+    "status": "open",
+    "policy_id": "baseline-shadow-ai",
+    "policy_version": "1",
+    "factor_codes": ["authorization_unknown"],
+    "evidence": [],
+    "resource_path": "/api/v1/tally/findings/00000000-0000-7000-8000-000000000104",
+    "updated_at": "2026-08-14T10:00:00Z",
+    "revision": 1
+  },
+  "evidence_link": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "evidence_id": "00000000-0000-7000-8000-000000000105",
+    "observation_id": "00000000-0000-7000-8000-000000000106",
+    "source_kind": "dns_query",
+    "receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "observed_at": "2026-08-14T10:00:00Z",
+    "availability": "dereferenceable",
+    "resource_path": "/api/v1/tally/events"
+  },
+  "report_section": {
+    "schema_version": "1.0.0-alpha.1",
+    "producer": "godel_tally",
+    "section_id": "discovery_summary",
+    "title": "Agentless discovery summary",
+    "window_start": "2026-08-14T09:00:00Z",
+    "window_end": "2026-08-14T10:00:00Z",
+    "metrics": [
+      {
+        "metric_code": "systems_observed",
+        "label": "AI systems observed",
+        "value": 1
+      }
+    ],
+    "resource_path": "/api/v1/tally/overview",
+    "generated_at": "2026-08-14T10:00:00Z",
+    "revision": 1
+  },
+  "host_request": {
+    "context": {
+      "schema_version": "1.0.0-alpha.1",
+      "issuer": "tally-host",
+      "audience": "godel-tally",
+      "actor_key": "host_actor:previous",
+      "capabilities": ["read_inventory"],
+      "correlation_id": "00000000-0000-7000-8000-000000000107",
+      "issued_at": "2026-08-14T10:00:00Z",
+      "expires_at": "2026-08-14T10:05:00Z"
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "key_id": "tally-host-context-previous",
+      "signature_base64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  }
+}

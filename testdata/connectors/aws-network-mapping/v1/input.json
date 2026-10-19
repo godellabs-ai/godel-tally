@@ -1,0 +1,17 @@
+{
+  "provider": "aws",
+  "account_id": "111122223333",
+  "region": "us-east-1",
+  "network_id": "vpc-0tallyprivate",
+  "records": [
+    {
+      "valid_from": "2026-08-13T09:30:00Z",
+      "valid_until": "2026-08-13T10:30:00Z",
+      "private_ip": "10.20.0.20",
+      "interface_id": "eni-0CONTENT_CANARY",
+      "resource_id": "arn:aws:sagemaker:us-east-1:111122223333:endpoint/tally-private-endpoint",
+      "resource_kind": "inference_endpoint",
+      "hostname": "model-host-aws.internal"
+    }
+  ]
+}
