@@ -359,20 +359,30 @@ fn build_plan(installation: Uuid, created_at: DateTime<Utc>) -> SamplePlan {
             o.network.protocol = Some("tcp".into());
             o.outcome.action = Some(["allowed", "blocked", "observed"][scenario].into());
             o.outcome.result = Some(["completed", "policy_denied", "recorded"][scenario].into());
+            // Managed workflows retain their reported names. Other observations identify the AI
+            // application/runtime (Ollama, LiteLLM, etc.); models remain service metadata.
+            let managed = descriptor.connector_type.contains("agents");
+            let application = if managed {
+                agent_name
+            } else {
+                provider_profile.name
+            };
+            let platform = if managed {
+                platform_for(&descriptor.connector_type)
+            } else {
+                provider_profile.name
+            };
             o.agent = AgentObservation {
                 key: Some(format!("{ns}.agent.{key}")),
                 name: Some(match scenario {
                     1 => "GitHub MCP Server".into(),
-                    2 => "Claude Desktop · Workspace tools".into(),
-                    _ => agent_name.into(),
+                    2 => format!("{application} · Workspace tools"),
+                    _ => application.into(),
                 }),
                 kind: Some(["agent", "mcp_server", "mcp_config"][scenario].into()),
-                platform: Some(platform_for(&descriptor.connector_type).into()),
-                parent_key: Some(format!("{ns}.parent.{index}")),
-                parent_name: Some(format!(
-                    "{} · Operations",
-                    platform_for(&descriptor.connector_type)
-                )),
+                platform: Some(platform.into()),
+                parent_key: (scenario > 0).then(|| format!("{ns}.caller.{key}")),
+                parent_name: (scenario > 0).then(|| application.into()),
                 state: Some(["active", "paused", "draft"][scenario].into()),
                 attribution_confidence: Some("source_reported".into()),
                 attribution_basis: Some(
@@ -499,16 +509,37 @@ fn build_plan(installation: Uuid, created_at: DateTime<Utc>) -> SamplePlan {
             plan.observations.push(o);
         }
     }
-    let reviews = plan
-        .observations
-        .iter()
-        .take(3)
-        .flat_map(project)
-        .filter(|r| r.detail.kind == "agent")
-        .take(3)
-        .collect::<Vec<_>>();
-    for (index, record) in reviews.iter().enumerate() {
-        plan.push("tally_estate_reviews",serde_json::json!({"installation_id":installation,"entity_id":record.id,"sanctioned":if index==0 {Some(true)} else {None},"flagged":index>0,"updated_at":timestamp}));
+    // Application reviews mirror provider defaults, so the evaluation graph includes both
+    // sanctioned and unsanctioned agent paths. Named managed agents remain awaiting review;
+    // their provider/model decisions still come from findings, not an invented agent approval.
+    let mut reviews = BTreeMap::new();
+    for observation in &plan.observations {
+        let managed = observation.connector.connector_type.contains("agents");
+        let sanctioned = if managed {
+            None
+        } else {
+            plan.rows["ai_providers"]
+                .iter()
+                .find(|row| {
+                    row["key"].as_str() == observation.service.vendor_application_id.as_deref()
+                })
+                .and_then(|row| row["sanctioned"].as_bool())
+        };
+        for record in project(observation)
+            .into_iter()
+            .filter(|record| record.detail.kind == "agent")
+        {
+            reviews.insert(
+                record.id,
+                (
+                    sanctioned,
+                    observation.agent.state.as_deref() == Some("archived"),
+                ),
+            );
+        }
+    }
+    for (entity_id, (sanctioned, flagged)) in reviews {
+        plan.push("tally_estate_reviews",serde_json::json!({"installation_id":installation,"entity_id":entity_id,"sanctioned":sanctioned,"flagged":flagged,"updated_at":timestamp}));
     }
     for table in ["connector_states", "connector_runs", "ingestion_batches"] {
         for row in plan.rows.get_mut(table).expect("sample connector rows") {
@@ -1023,6 +1054,56 @@ mod tests {
                 assert!(provider.ends_with(".5"));
             }
         }
+    }
+
+    #[test]
+    fn evaluation_graph_has_application_agents_and_reported_mcp_callers() {
+        let plan = build_plan(Uuid::new_v4(), Utc::now());
+        let records = plan
+            .observations
+            .iter()
+            .flat_map(project)
+            .filter(|record| record.detail.kind == "agent")
+            .map(|record| (record.id, record.detail.name))
+            .collect::<BTreeMap<_, _>>();
+        for application in ["Ollama", "LiteLLM", "vLLM"] {
+            let ids = records
+                .iter()
+                .filter(|(_, name)| name.as_str() == application)
+                .map(|(id, _)| id.to_string())
+                .collect::<BTreeSet<_>>();
+            assert!(!ids.is_empty(), "missing application agent {application}");
+            let reviews = plan.rows["tally_estate_reviews"]
+                .iter()
+                .filter(|row| ids.contains(row["entity_id"].as_str().unwrap()))
+                .collect::<Vec<_>>();
+            assert_eq!(reviews.len(), ids.len());
+            assert!(reviews.iter().all(|row| row["sanctioned"] == false));
+        }
+        assert!(
+            records
+                .values()
+                .all(|name| { MODELS.iter().all(|model| !name.contains(model.name)) })
+        );
+        for observation in &plan.observations {
+            if matches!(
+                observation.agent.kind.as_deref(),
+                Some("mcp_server" | "mcp_config")
+            ) {
+                assert!(observation.agent.parent_key.is_some());
+                assert!(observation.agent.parent_name.is_some());
+                assert!(project(observation).iter().any(|record| {
+                    record.record_type == "edge"
+                        && matches!(record.detail.kind.as_str(), "calls" | "spawns")
+                }));
+            } else {
+                assert!(observation.agent.parent_key.is_none());
+            }
+        }
+        let reviews = &plan.rows["tally_estate_reviews"];
+        assert!(reviews.iter().any(|row| row["sanctioned"] == true));
+        assert!(reviews.iter().any(|row| row["sanctioned"].is_null()));
+        assert!(reviews.iter().any(|row| row["flagged"] == true));
     }
 
     #[test]

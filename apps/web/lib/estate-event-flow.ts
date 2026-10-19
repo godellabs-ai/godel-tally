@@ -2,6 +2,7 @@ import type { EstateRecord } from "./estate";
 import { estateJourneys, journeyAgentProtected, type ExposureRisk } from "./estate-journeys";
 import { estateRecordIds } from "./estate";
 import type { GovernanceFindingsResponse } from "./tally";
+import { hasReportedDecision } from "./estate-flow-labels";
 
 export interface EstateFlowCount { key: string; count: number }
 /** Gate events and connector discoveries share a presentation, never a unit of measurement. */
@@ -25,9 +26,19 @@ export const isConnectorEvidence = (record: EstateRecord) => [record.detail.conn
 const agentKinds = new Set(["agent", "workflow"]);
 const destinationKinds = new Set(["mcp_server", "mcp_config", "endpoint", "data_source"]);
 
-/** Findings survive log retention and may have no agent or estate relationship at all.
- * Use the same saved provider/model decision as the table. A finding's users are associated
- * with its provider/model, not paired with its aggregated agents, hosts or destinations.
+/** Rendering and selection must agree about which columns have reported evidence. */
+export function flowPathHasColumn(path: EstateFlowPath, category: string): boolean {
+  if (category === "Verdict") return hasReportedDecision(path.verdict);
+  if (path.evidence === "finding") {
+    if (category === "Taxonomy") return false;
+    if (category === "Source") return Boolean(path.source);
+  }
+  return true;
+}
+
+/** Findings name the observed AI application/runtime, without exposing its models as sources.
+ * Use the same saved provider/model decision as the table. Independent client/destination
+ * aggregates cannot establish which user called which client or MCP server.
  */
 export function findingsEventFlow(findings: GovernanceFindingsResponse): EstateEventFlow {
   const rows = new Map([...findings.sanctioned, ...findings.unsanctioned, ...findings.authorization_queue].map(finding => [finding.finding_id, finding]));
@@ -40,8 +51,8 @@ export function findingsEventFlow(findings: GovernanceFindingsResponse): EstateE
     for (const user of users.length ? users : [""]) paths.push({
       evidence: "finding", findingId: finding.finding_id,
       discoveryId: JSON.stringify(["finding", finding.finding_id, user]),
-      user, authorization_status: finding.status, agent: "", domain: "Unknown", verdict: "Unknown",
-      source: [finding.provider.name, finding.model?.name].filter(Boolean).join(" · "), count: 1,
+      user, authorization_status: finding.status, agent: finding.provider.name || "Unknown Agent", domain: "Unknown", verdict: "Unknown",
+      source: "", count: 1,
       risks: finding.status === "unsanctioned" ? ["unsanctioned"] : [],
     });
   }

@@ -6,12 +6,12 @@ import { sourceModule } from "./source-module.mjs";
 const record = (id, kind, platform = null) => ({ id, record_type: "node", first_seen: 1, last_seen: 2, detail: { kind, name: id, platform, connector_type: "godel_gate_runtime" } });
 const { connectorEventFlow, combineEventFlows, findingsEventFlow } = sourceModule("lib/estate-event-flow.ts");
 
-test("overview includes all saved finding statuses without requiring an agent or estate record", () => {
+test("overview routes every finding status through its AI application without model/source nodes", () => {
   const finding = status => ({ finding_id: status, status, provider: { name: "Provider" }, model: { name: "Model" }, users: [] });
   const data = { sanctioned: [finding("sanctioned")], unsanctioned: [finding("unsanctioned")], authorization_queue: [finding("authorization_queue")] };
   const flow = findingsEventFlow(data);
   assert.deepEqual(flow.paths.map(path => path.authorization_status), ["sanctioned", "unsanctioned", "authorization_queue"]);
-  assert(flow.paths.every(path => path.evidence === "finding" && path.agent === "" && path.user === "" && path.verdict === "Unknown"));
+  assert(flow.paths.every(path => path.evidence === "finding" && path.agent === "Provider" && path.source === "" && path.user === "" && path.verdict === "Unknown"));
   assert.equal(flow.events, 0);
   assert.equal(scopeEventPaths(flow.paths, { ...defaultFlowScope, lens: "unsanctioned" }).length, 1);
   assert.equal(scopeEventPaths(flow.paths, { ...defaultFlowScope, lens: "review" }).length, 1);
@@ -29,7 +29,21 @@ test("finding graph deduplicates users and findings without pairing aggregated a
   const flow = findingsEventFlow({ sanctioned: [row, row], unsanctioned: [], authorization_queue: [] });
   assert.equal(flow.paths.length, 2);
   assert.deepEqual(flow.paths.map(path => path.user), ["alice@example.com", "bob"]);
-  assert(flow.paths.every(path => path.findingId === "one" && path.agent === "" && path.source === "Provider"));
+  assert(flow.paths.every(path => path.findingId === "one" && path.agent === "Provider" && path.source === ""));
+});
+
+test("Ollama model findings share an agent while retaining distinct authorization findings", () => {
+  const finding = (id, model, status) => ({ finding_id: id, status, provider: { name: "Ollama" }, model: { name: model }, users: [{ kind: "email", email: "alice@example.com" }] });
+  const flow = findingsEventFlow({ sanctioned: [finding("allowed", "Approved local model", "sanctioned")],
+    unsanctioned: [finding("llama", "Llama 3.3", "unsanctioned"), finding("qwen", "Qwen2.5-VL", "unsanctioned")], authorization_queue: [] });
+  assert.equal(flow.paths.length, 3);
+  assert(flow.paths.every(path => path.agent === "Ollama" && path.source === ""));
+  const selected = selectEventPaths(flow.paths, ["Authorization:Unsanctioned", "Agent:Ollama"]);
+  assert.deepEqual(selected.map(path => path.findingId), ["llama", "qwen"]);
+  assert.equal(selectEventPaths(flow.paths, ["Agent:private-agent"]).length, 0);
+  assert.equal(selectEventPaths(flow.paths, ["Source:Llama 3.3"]).length, 0);
+  for (const node of ["Source:None", "Taxonomy:Unknown", "Verdict:Unknown"])
+    assert.equal(selectEventPaths(flow.paths, [node]).length, 0, `finding has no ${node} node`);
 });
 function connectorFlowFixture() {
   const people = [record("alice@example.com", "identity"), record("bob@example.com", "identity")];

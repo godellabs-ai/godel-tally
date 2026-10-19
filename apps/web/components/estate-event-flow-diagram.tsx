@@ -2,17 +2,13 @@
 
 import React, { useMemo, useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Server, User, Bot, Database, ShieldCheck, ShieldAlert, ShieldX, FolderCheck, Clock3, Search, CircleHelp } from "lucide-react";
-import type { EstateFlowPath as FlowPath, EstateFlowCount as NamedCount } from "../lib/estate-event-flow";
+import { flowPathHasColumn, type EstateFlowPath as FlowPath, type EstateFlowCount as NamedCount } from "../lib/estate-event-flow";
 import { cn } from "@/lib/utils";
 
-import { authorizationStatusDisplayName, sourceDisplayName, verdictDisplayName } from "../lib/estate-flow-labels";
+import { authorizationStatusDisplayName, sourceDisplayName, verdictDisplayName, hasReportedDecision } from "../lib/estate-flow-labels";
 export { authorizationStatusDisplayName, sourceDisplayName, verdictDisplayName } from "../lib/estate-flow-labels";
 
 const identityLabel = (name: string) => name;
-function hasReportedDecision(verdict: string | null | undefined) {
-  const value = verdict?.trim().toLowerCase();
-  return Boolean(value && value !== "unknown" && value !== "unknown verdict");
-}
 function nodeCount(node: DiagramNode) {
   return [node.events ? `${node.events} events` : "", node.findingIds.size ? `${node.findingIds.size} ${node.findingIds.size === 1 ? "finding" : "findings"}` : "", node.discoveries ? `${node.discoveries} ${node.discoveries === 1 ? "path" : "paths"}` : ""].filter(Boolean).join(" · ") || "0 events";
 }
@@ -305,10 +301,9 @@ export function EventFlowDiagram({
       };
       const ids: string[] = [];
       cats.forEach((category, i) => {
-        // Keep discovery paths through their source, without inventing a decision or final edge.
-        if (category === "Verdict" && !hasReportedDecision(p.verdict)) return;
-        // Aggregated findings do not establish a user -> agent or content relationship.
-        if (p.evidence === "finding" && (category === "Agent" || category === "Taxonomy")) return;
+        // Every path includes its AI application/runtime (or an explicitly unknown agent).
+        // Findings do not establish content classifications or MCP/data-source connections.
+        if (!flowPathHasColumn(p, category)) return;
         const value = values[category];
         const id = `${category}:${value}`;
         ids.push(id);
@@ -1164,6 +1159,8 @@ export function EventFlowDiagram({
               <path
                 key={linkKey}
                 className="edge"
+                data-flow-source={link.sourceId}
+                data-flow-target={link.targetId}
                 strokeWidth={computedWidth}
                 d={pathD}
               />
@@ -1176,6 +1173,8 @@ export function EventFlowDiagram({
               <path
                 key={linkKey}
                 className="edge dim"
+                data-flow-source={link.sourceId}
+                data-flow-target={link.targetId}
                 strokeWidth={computedWidth}
                 d={pathD}
               />
@@ -1184,7 +1183,7 @@ export function EventFlowDiagram({
 
           // Node selected and this edge is active/related
           return (
-            <g key={linkKey}>
+            <g key={linkKey} data-flow-source={link.sourceId} data-flow-target={link.targetId}>
               {/* Highlight drop shadow glow */}
               <path
                 className={`edge active-glow ${tone}`}

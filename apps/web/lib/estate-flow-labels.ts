@@ -28,3 +28,7 @@ export const verdictDisplayName = (verdict: string): string => {
   return v;
 };
 
+export function hasReportedDecision(verdict: string | null | undefined) {
+  const value = verdict?.trim().toLowerCase();
+  return Boolean(value && value !== "unknown" && value !== "unknown verdict");
+}

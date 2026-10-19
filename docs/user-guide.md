@@ -219,6 +219,11 @@ credentials or scheduled jobs. Add a separate connection for a live source.
 Evaluation providers follow the enterprise exceptions in the [registry defaults](data-model.md#catalog-and-governance);
 models follow their catalogued owner's default, including when hosted through another provider.
 Other providers and models start unsanctioned. SaaS examples use the same provider decisions.
+Overview places the AI application/runtime in **Agents**: for example, an Ollama/Llama 3.3 finding
+appears as **Ollama**, with its authorization status. Models stay in findings and registry details;
+they are not graph nodes. **MCP Server / Data Source** contains reported connections, not model
+labels. Evaluation application agents have sanctioned/unsanctioned reviews matching provider
+defaults, while named managed agents also demonstrate the review queue.
 Evaluation providers, models, and attribution use a separate namespace; existing registry decisions and
 operational records are preserved. Repeating **Restore evaluation data** repairs missing examples
 without duplicating them. Existing decisions on evaluation records are retained.

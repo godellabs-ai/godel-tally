@@ -33,8 +33,9 @@ test("Tally exposure paths preserve callers, exclude unknown protection, and cle
   await setup(page); await page.goto("/");
   await page.getByRole("button", { name: "Exposure paths", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unprotected devices" })).toHaveCount(0);
-  await expect(graph(page).locator('.flow-node.agent')).toHaveCount(1);
-  await expect(graph(page).locator('.flow-node.agent')).toContainText("Claude Code");
+  await expect(graph(page).locator('.flow-node.agent')).toHaveCount(2);
+  await expect(graph(page).locator('.flow-node.agent').filter({ hasText: "Claude Code" })).toBeVisible();
+  await expect(graph(page).locator('.flow-node.agent').filter({ hasText: "Unapproved AI" })).toBeVisible();
   await expect(graph(page).locator(".flow-node.source").filter({ hasText: "api.openai.com" })).toBeVisible();
   await page.getByRole("button", { name: "Flagged for review", exact: true }).click();
   await expect(page.getByText("No matching activity.", { exact: true })).toBeVisible();
@@ -64,8 +65,33 @@ test("provider findings populate the graph even when estate inventory is empty",
   await page.goto("/");
   await expect(graph(page).locator(".flow-node.authorization.sanctioned")).toContainText("1 finding");
   await expect(graph(page).locator(".flow-node.authorization.unsanctioned")).toContainText("1 finding");
-  await expect(graph(page).locator(".flow-node.agent")).toHaveCount(0);
+  await expect(graph(page).locator(".flow-node.agent")).toHaveCount(3);
+  await expect(graph(page).locator(".flow-node.source")).toHaveCount(0);
   await expect(findings(page).getByRole("table")).toBeVisible();
+});
+
+test("unsanctioned model findings connect to Ollama in Agents and never bypass it", async ({ page }) => {
+  await setup(page);
+  const data = findingsFixture();
+  const finding = data.unsanctioned[0];
+  finding.provider.name = "Ollama";
+  finding.provider.category = "local_runtime";
+  finding.model = { model_id: "llama", key: "llama3.3", name: "Llama 3.3", family: "Llama", country_code: "US", modalities: ["text"], capabilities: ["chat"], catalog: true,
+    sanctioned: false, provider_ids: [finding.provider.provider_id], provider_names: ["Ollama"], finding_count: 1, last_used_at: null };
+  finding.users = [{ endpoint_user_id: "alice", kind: "email", value: "alice@example.test", email: "alice@example.test", first_seen: finding.first_used_at, last_seen: finding.last_used_at }];
+  await page.route("**/api/v1/tally/findings", route => route.fulfill({ json: { ...data, sanctioned: [], authorization_queue: [] } }));
+  await page.route("**/api/v1/tally/estate?**", route => route.fulfill({ json: { ...fixture(), records: [] } }));
+  await page.goto("/");
+  await expect(graph(page).locator('.flow-node.agent')).toHaveCount(1);
+  await expect(graph(page).locator('.flow-node.agent')).toContainText("Ollama");
+  await expect(graph(page)).not.toContainText("Llama 3.3");
+  await expect(graph(page).locator('.flow-node.source')).toHaveCount(0);
+  const link = graph(page).locator('[data-flow-source="Authorization:Unsanctioned"][data-flow-target="Agent:Ollama"]');
+  await expect(link).toHaveCount(1);
+  await graph(page).locator('.flow-node.authorization.unsanctioned').click();
+  await expect(graph(page).locator('.flow-node.agent.active')).toContainText("Ollama");
+  await expect(link).toHaveCount(1);
+  await expect(graph(page).locator('[data-flow-source^="Authorization:"][data-flow-target^="Source:"]')).toHaveCount(0);
 });
 
 test("refresh updates the overview graph and preserves the selected event status", async ({ page }) => {
@@ -99,7 +125,7 @@ test("legacy findings links retain the requested status filter on overview", asy
   await expect(findings(page).getByRole("button", { name: "Sanctioned", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("graph counts distinct findings across users and exposes hidden source nodes", async ({ page }) => {
+test("graph counts distinct findings across users and exposes hidden AI application agents", async ({ page }) => {
   await setup(page);
   const data = findingsFixture();
   const approved = data.sanctioned[0];
@@ -109,12 +135,13 @@ test("graph counts distinct findings across users and exposes hidden source node
   await page.route("**/api/v1/tally/estate?**", route => route.fulfill({ json: { ...fixture(), records: [] } }));
   await page.goto("/");
   await expect(graph(page).locator(".flow-node.authorization.sanctioned")).toContainText("30 findings");
-  const sources = graph(page).getByRole("group", { name: "MCP Server / Data Source nodes", exact: true });
-  await graph(page).getByRole("button", { name: "Show more mcp server / data source" }).click();
-  await expect.poll(() => sources.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-  await graph(page).getByRole("textbox", { name: "Search MCP Server / Data Source" }).fill("Provider 29");
-  await expect.poll(() => sources.evaluate(element => element.scrollTop)).toBe(0);
-  await expect(sources.locator(".flow-node.source").first()).toContainText("Provider 29");
+  const agents = graph(page).getByRole("group", { name: "Agents nodes", exact: true });
+  await graph(page).getByRole("button", { name: "Show more agents" }).click();
+  await expect.poll(() => agents.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await graph(page).getByRole("textbox", { name: "Search Agents" }).fill("Provider 29");
+  await expect.poll(() => agents.evaluate(element => element.scrollTop)).toBe(0);
+  await expect(agents.locator(".flow-node.agent").first()).toContainText("Provider 29");
+  await expect(graph(page).locator(".flow-node.source")).toHaveCount(0);
   await graph(page).getByRole("button", { name: "AI Authorization", exact: true }).click();
   await expect(findings(page).getByRole("button", { name: "Authorization Queue", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "All activity", exact: true })).toBeInViewport();

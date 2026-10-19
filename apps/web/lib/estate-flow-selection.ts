@@ -1,4 +1,4 @@
-import type { EstateFlowPath } from "./estate-event-flow";
+import { flowPathHasColumn, type EstateFlowPath } from "./estate-event-flow";
 import { estateRecordIds, type EstateRecord } from "./estate";
 import { authorizationStatusDisplayName, sourceDisplayName, verdictDisplayName } from "./estate-flow-labels";
 
@@ -10,8 +10,9 @@ export const flowLenses = [{ id: "all", label: "All activity" }, { id: "unsancti
 export const flowRisks = [{ id: "all", label: "All risks" }, { id: "unsanctioned", label: "Unsanctioned" }, { id: "unprotected", label: "Unprotected devices" }, { id: "flagged", label: "Flagged for review" }, { id: "offline", label: "Offline protection" }, { id: "blocked", label: "Blocked" }, { id: "warned", label: "Warned" }] as const;
 
 export function flowPathValues(path: EstateFlowPath): Record<string, string> {
-  return { User: path.user || "Unknown User", Authorization: authorizationStatusDisplayName(path.authorization_status),
+  const values = { User: path.user || "Unknown User", Authorization: authorizationStatusDisplayName(path.authorization_status),
     Agent: path.agent || "Unknown Agent", Taxonomy: path.domain, Source: path.source ? sourceDisplayName(path.source) : "None", Verdict: verdictDisplayName(path.verdict) };
+  return Object.fromEntries(Object.entries(values).filter(([category]) => flowPathHasColumn(path, category)));
 }
 export function flowPathRisks(path: EstateFlowPath): Set<Exclude<FlowRisk, "all">> {
   const risks = new Set<Exclude<FlowRisk, "all">>(path.risks ?? []);
