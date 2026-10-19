@@ -31,8 +31,17 @@ done
 command -v curl >/dev/null || { echo 'curl is required' >&2; exit 1; }
 command -v tar >/dev/null || { echo 'tar is required' >&2; exit 1; }
 asset="tallyd-${os}-${arch}.tar.gz"
-if [ "$version" = latest ]; then base="https://github.com/$repo/releases/latest/download"
-else base="https://github.com/$repo/releases/download/$version"; fi
+if [ "$version" = latest ]; then
+    # Resolve once so an update cannot mix an archive and checksums from different releases.
+    release_url="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fLsS --retry 3 \
+        -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")"
+    case "$release_url" in
+        "https://github.com/$repo/releases/tag/"*) version="${release_url##*/}" ;;
+        *) echo 'Could not resolve the latest Tally release' >&2; exit 1 ;;
+    esac
+    case "$version" in *[!A-Za-z0-9._-]*|'') echo 'Invalid release tag' >&2; exit 1 ;; esac
+fi
+base="https://github.com/$repo/releases/download/$version"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 curl --proto '=https' --tlsv1.2 -fLsS --retry 3 "$base/$asset" -o "$stage/$asset"

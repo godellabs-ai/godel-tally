@@ -41,6 +41,15 @@ jobs:
         run: |
           rustup show
           rustup target add '${{ matrix.target }}'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Test release downloader
+        run: |
+          python3 scripts/test-deployment.py \
+            Deployment.test_download_verifies_checksum_before_executing_installer \
+            Deployment.test_pinned_download_selects_all_four_platforms \
+            Deployment.test_unresolved_latest_release_never_executes_installer
       - name: Build UI and registry
         run: make web-install web-build registry-build
       - name: Build binary
@@ -54,6 +63,9 @@ jobs:
           TALLY_RELEASE_BINARY: target/${{ matrix.target }}/container/tallyd
         run: |
           "$TALLY_RELEASE_BINARY" --version
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$("$TALLY_RELEASE_BINARY" --version)" = "tallyd ${GITHUB_REF_NAME#v}"
+          fi
           "$TALLY_RELEASE_BINARY" collector check
           bash scripts/package-release.sh
       - uses: actions/upload-artifact@v4
@@ -79,5 +91,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           cat dist/*.sha256 > dist/SHA256SUMS
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --generate-notes
+          test "$(find dist -name '*.tar.gz' | wc -l)" -eq 4
+          (cd dist && sha256sum --check SHA256SUMS)
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --draft --verify-tag --generate-notes
           gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest

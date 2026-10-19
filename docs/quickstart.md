@@ -6,11 +6,10 @@ Docker is optional. No nginx or Node.js process is required in production.
 
 ## Customer installation
 
-Once the public repository has a binary release:
+Download and install the latest release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh -o install-tally.sh
-bash install-tally.sh
+curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh -o install-tally.sh && bash install-tally.sh
 ```
 
 Run as a regular user, with Bash, curl, tar and OpenSSL available. With Apple's system LibreSSL,
@@ -98,15 +97,16 @@ tail -f ~/.local/share/godel-tally/server.log
 LaunchAgents start at login, not before a user logs in. Native database LaunchAgents use labels
 `ai.godel.tally.postgres` and `ai.godel.tally.clickhouse`.
 
-Pin a release with `TALLY_VERSION=v0.1.0-alpha.1 bash install-tally.sh` (substitute a published tag).
+Pin a release with `TALLY_VERSION=v0.1.0 bash install-tally.sh` (substitute a published tag).
 Run the installer again to update. `--no-start` installs and registers Tally without starting it;
 native database provisioning still starts the databases. `--no-service` skips Tally's service
 registration and prints a manual launcher; native databases still use user services.
 `--dry-run` describes platform selection without making changes.
 
 The release workflow builds all four platform artifacts and `SHA256SUMS` on `v*` tags. A manual
-workflow run builds downloadable CI artifacts without publishing a GitHub Release. Cross-platform
-package installation and runtime qualification must be completed on target hosts before release.
+workflow run builds downloadable CI artifacts without publishing a GitHub Release. Each binary is
+smoke-tested on its matching operating system and architecture. Database package availability and
+user-service setup depend on your host; see the prerequisites above.
 
 ## Use your existing HTTPS certificate
 

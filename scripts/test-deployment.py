@@ -27,7 +27,10 @@ elif name == 'curl' and os.environ.get('BOOTSTRAP_SOURCE'):
     import shutil
     source=pathlib.Path(os.environ['BOOTSTRAP_SOURCE'])
     url=next(a for a in args if a.startswith('https://'))
-    shutil.copyfile(source/url.rsplit('/',1)[1],args[args.index('-o')+1])
+    if url.endswith('/releases/latest'):
+        print(os.environ.get('TEST_RELEASE_URL',url.removesuffix('/latest')+'/tag/v0.1.0'),end='')
+    else:
+        shutil.copyfile(source/url.rsplit('/',1)[1],args[args.index('-o')+1])
 elif name == 'pg_config': print(root/'bin')
 elif name == 'brew' and args[0] == '--prefix': print(root/'brew')
 elif name == 'initdb':
@@ -222,9 +225,38 @@ while true; do /bin/sleep 1; done
         self.env['BOOTSTRAP_SOURCE']=str(release)
         self.run_script(ROOT/'install.sh','--db','existing')
         self.assertTrue((self.root/'installed').exists())
+        urls=[next(a for a in c if a.startswith('https://')) for c in self.commands() if c[0]=='curl']
+        self.assertEqual(urls,[
+            'https://github.com/godellabs-ai/godel-tally/releases/latest',
+            'https://github.com/godellabs-ai/godel-tally/releases/download/v0.1.0/'+archive.name,
+            'https://github.com/godellabs-ai/godel-tally/releases/download/v0.1.0/SHA256SUMS'])
         (self.root/'installed').unlink()
         sums.write_text(f'{"0"*64}  {archive.name}\n')
         self.run_script(ROOT/'install.sh','--db','existing',ok=False)
+        self.assertFalse((self.root/'installed').exists())
+    def test_pinned_download_selects_all_four_platforms(self):
+        release=self.root/'release';release.mkdir()
+        installer=self.root/'bootstrap-installer.sh'
+        installer.write_text('#!/bin/bash\nprintf "%s\\n" "$*" > "$FIXTURE/installed"\n')
+        self.env.update(BOOTSTRAP_SOURCE=str(release),TALLY_VERSION='v0.1.0')
+        for os_name,arch,platform in [('Linux','x86_64','linux-amd64'),('Linux','aarch64','linux-arm64'),
+                                      ('Darwin','x86_64','darwin-amd64'),('Darwin','arm64','darwin-arm64')]:
+            with self.subTest(platform=platform):
+                archive=release/f'tallyd-{platform}.tar.gz'
+                with tarfile.open(archive,'w:gz') as package:
+                    package.add(installer,arcname='scripts/install-runtime.sh')
+                checksum=hashlib.sha256(archive.read_bytes()).hexdigest()
+                (release/'SHA256SUMS').write_text(f'{checksum}  {archive.name}\n')
+                self.env.update(TEST_OS=os_name,TEST_ARCH=arch)
+                self.run_script(ROOT/'install.sh','--db','docker','--no-start')
+                self.assertTrue((self.root/'installed').read_text().endswith('--db docker --no-start\n'))
+        urls=[next(a for a in c if a.startswith('https://')) for c in self.commands() if c[0]=='curl']
+        self.assertEqual(len(urls),8)
+        self.assertTrue(all('/releases/download/v0.1.0/' in url for url in urls))
+    def test_unresolved_latest_release_never_executes_installer(self):
+        self.env.update(BOOTSTRAP_SOURCE=str(self.root),TEST_RELEASE_URL='https://github.com/login')
+        result=self.run_script(ROOT/'install.sh',ok=False)
+        self.assertIn('Could not resolve the latest Tally release',result.stderr)
         self.assertFalse((self.root/'installed').exists())
     def test_configuration_is_data_not_shell_code(self):
         payload=f'$(touch {self.root}/injected)'

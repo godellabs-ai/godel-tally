@@ -4203,7 +4203,7 @@ dependencies = [
 
 [[package]]
 name = "tally-api"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4233,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "tally-collector"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -4271,7 +4271,7 @@ dependencies = [
 
 [[package]]
 name = "tally-config"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.4.3",
@@ -4283,7 +4283,7 @@ dependencies = [
 
 [[package]]
 name = "tally-connectors"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4302,7 +4302,7 @@ dependencies = [
 
 [[package]]
 name = "tally-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "schemars",
@@ -4316,7 +4316,7 @@ dependencies = [
 
 [[package]]
 name = "tally-detect"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4328,7 +4328,7 @@ dependencies = [
 
 [[package]]
 name = "tally-observation-buffer"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4345,7 +4345,7 @@ dependencies = [
 
 [[package]]
 name = "tally-provenance"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hex",
  "serde",
@@ -4356,7 +4356,7 @@ dependencies = [
 
 [[package]]
 name = "tally-registry"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4370,7 +4370,7 @@ dependencies = [
 
 [[package]]
 name = "tally-registry-cli"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4392,7 +4392,7 @@ dependencies = [
 
 [[package]]
 name = "tally-resolve"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4407,7 +4407,7 @@ dependencies = [
 
 [[package]]
 name = "tally-risk"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4417,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "tally-scanner"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4434,7 +4434,7 @@ dependencies = [
 
 [[package]]
 name = "tally-store-postgres"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "getrandom 0.4.3",
@@ -4456,7 +4456,7 @@ dependencies = [
 
 [[package]]
 name = "tally-testkit"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "serde_json",
@@ -4466,7 +4466,7 @@ dependencies = [
 
 [[package]]
 name = "tally-upgrade"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4488,7 +4488,7 @@ dependencies = [
 
 [[package]]
 name = "tallyd"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",

@@ -41,17 +41,26 @@ and the permissions they have; an inventory is not proof that every AI system ha
 
 ## Try Tally
 
-From a source checkout, with the [Rust toolchain](rust-toolchain.toml), Node.js 24, npm 11,
-`cargo-watch`, OpenSSL, and Docker installed:
+Install the latest release on **Linux or macOS, amd64 or arm64**:
 
 ```bash
-make web-install
-make dev
+curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh -o install-tally.sh && bash install-tally.sh
 ```
 
-Open **https://localhost:8080** and create the first administrator account. The local certificate is
-self-signed. Development runs Rust and Next.js natively, with PostgreSQL and ClickHouse in containers.
-For Apple containers or existing databases, see the [setup guide](docs/quickstart.md#development).
+The script downloads the matching binary from [GitHub Releases](https://github.com/godellabs-ai/godel-tally/releases/latest),
+verifies its checksum, installs PostgreSQL and ClickHouse, creates Tally's databases, and starts Tally
+as a user service (`systemd --user` on Linux, a LaunchAgent on macOS). The web console is embedded in
+the binary; Docker, Node.js, and nginx are not required.
+
+Run as your normal user with Bash, curl, tar, and OpenSSL available. macOS needs
+[Homebrew](https://brew.sh); Linux needs sudo for native database packages and a working systemd user
+session. See the [installation guide](docs/quickstart.md) for supported package managers and service details.
+
+Open **https://localhost:8443** and create the first administrator account. The local certificate is
+self-signed. To use Docker or Apple containers for the databases, run `bash install-tally.sh --db docker`
+or `bash install-tally.sh --db apple`. [Existing databases](docs/quickstart.md#choose-database-deployment-independently)
+are supported too. For native Rust/Next.js development with live reload, follow the
+[development setup](docs/quickstart.md#development).
 
 **No connectors ready yet?** Click **Add evaluation data** on an empty Overview. Follow GPT-4o, Claude Sonnet 4,
 Gemini 2.5 Pro, Llama 3.3, and other real models through a realistic enterprise workspace spanning
@@ -120,11 +129,9 @@ make build       # Build tallyd with the production UI embedded
 make run         # Run locally; Docker databases by default
 ```
 
-The release workflow targets Linux and macOS on amd64 and arm64. The installer supports native,
+Release binaries are available for Linux and macOS on amd64 and arm64. The installer supports native,
 Docker, Apple-container, or existing databases, independently for PostgreSQL and ClickHouse.
-Published-release downloads and cross-platform package installation require release qualification;
-use the source workflow above while binary releases are being prepared. See [installation and
-operations](docs/quickstart.md) for deployment details.
+See [installation and operations](docs/quickstart.md) for deployment details.
 
 ### Tally and Gödel Gate
 
