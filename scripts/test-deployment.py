@@ -142,6 +142,8 @@ class Deployment(unittest.TestCase):
         self.assertIn('Preparing the private PostgreSQL database',result.stdout)
         self.assertNotIn('embedded UI is available',result.stdout)
         self.assertTrue((self.home/'Library/LaunchAgents/ai.godel.tally.postgres.plist').is_file())
+        wrapper=(Path(self.env['TALLY_INSTALL_DIR'])/'postgres.sh').read_text()
+        self.assertIn('export LC_ALL=en_US.UTF-8\n',wrapper)
     def test_postgres_version_parser_accepts_package_labels_and_rejects_unknown_banners(self):
         for banner,expected in [('postgres (PostgreSQL) 18.6 (Homebrew)','18'),
                                 ('postgres (PostgreSQL) 15.10 (Ubuntu 15.10-1.pgdg24.04+1)','15'),

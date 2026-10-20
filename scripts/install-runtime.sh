@@ -179,13 +179,20 @@ if [ "$pg_mode" = native ]; then
         "$pg_bin/initdb" -D "$TALLY_DATA_DIR/postgres" -U tally --auth=scram-sha-256 --pwfile="$password_file"
         rm -f "$password_file"
     fi
-    { printf '#!/usr/bin/env bash\nexec '; printf '%q ' "$pg_bin/postgres" -D "$TALLY_DATA_DIR/postgres" -h 127.0.0.1 -p "$TALLY_POSTGRES_PORT" -k ''; printf '\n'; } > "$TALLY_INSTALL_DIR/postgres.sh"
+    {
+        printf '#!/usr/bin/env bash\n'
+        # LaunchAgents do not inherit the terminal locale. Match Homebrew's service
+        # environment to prevent PostgreSQL's macOS multithreaded-startup failure.
+        if [ "$(uname -s)" = Darwin ]; then printf 'export LC_ALL=en_US.UTF-8\n'; fi
+        printf 'exec '; printf '%q ' "$pg_bin/postgres" -D "$TALLY_DATA_DIR/postgres" -h 127.0.0.1 -p "$TALLY_POSTGRES_PORT" -k ''; printf '\n'
+    } > "$TALLY_INSTALL_DIR/postgres.sh"
     write_service postgres "$TALLY_INSTALL_DIR/postgres.sh"
     progress 'Starting the PostgreSQL user service...'
     start_service postgres
     ready=0
     for attempt in $(seq 1 60); do
         if "$pg_bin/pg_isready" -h 127.0.0.1 -p "$TALLY_POSTGRES_PORT" -U tally >/dev/null 2>&1; then ready=1; break; fi
+        [ "$((attempt % 10))" != 0 ] || progress 'Waiting for PostgreSQL to become ready...'
         sleep 1
     done
     [ "$ready" = 1 ] || fail 'Private PostgreSQL instance did not become ready'
@@ -220,6 +227,7 @@ XML
     ready=0
     for attempt in $(seq 1 90); do
         if curl -fsS "http://127.0.0.1:$TALLY_CLICKHOUSE_PORT/ping" >/dev/null 2>&1; then ready=1; break; fi
+        [ "$((attempt % 10))" != 0 ] || progress 'Waiting for ClickHouse to become ready...'
         sleep 1
     done
     [ "$ready" = 1 ] || fail 'Private ClickHouse instance did not become ready'

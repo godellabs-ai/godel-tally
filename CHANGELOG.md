@@ -9,6 +9,7 @@ is below 1.0, minor releases may contain breaking API, schema, migration, or con
 
 - Accept PostgreSQL version banners with Homebrew and distribution suffixes, fixing native macOS
   installation after successful database package installation.
+- Set the PostgreSQL LaunchAgent locale explicitly so macOS database startup works outside a terminal.
 - Show platform, release lookup, download progress, checksum verification, database preparation,
   HTTPS setup, and service readiness during installation.
 - Add an uninstaller that removes application files and owned user services while retaining
