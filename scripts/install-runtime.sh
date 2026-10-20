@@ -2,9 +2,12 @@
 set -euo pipefail
 bundle="${1:?release directory required}"; shift
 source "$bundle/scripts/runtime-common.sh"
-mode=; pg_mode=; ch_mode=; no_start=0; no_service=0
+mode=; pg_mode=; ch_mode=; no_start=0; no_service=0; selected_port=
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --port)
+            [ "$#" -ge 2 ] && [[ "$2" =~ ^[1-9][0-9]{3,4}$ ]] && [ "$2" -ge 1024 ] && [ "$2" -le 65535 ] || fail '--port must be between 1024 and 65535'
+            selected_port="$2"; shift 2 ;;
         --db|--postgres|--clickhouse)
             [ "$#" -ge 2 ] || fail "Missing value for $1"
             case "$2" in native|docker|apple|existing) ;; *) fail "Invalid database mode: $2" ;; esac
@@ -77,6 +80,14 @@ export TALLY_CLICKHOUSE_URL="${TALLY_CLICKHOUSE_URL:-http://127.0.0.1:$TALLY_CLI
 export TALLY_CLICKHOUSE_DATABASE="${TALLY_CLICKHOUSE_DATABASE:-tally}"
 export TALLY_URL="${TALLY_URL:-https://localhost:8443}"
 export TALLY_HTTP_BIND="${TALLY_HTTP_BIND:-127.0.0.1:8443}"
+if [ -n "$selected_port" ]; then
+    # Keep the configured hostname/address, changing only the listening/public port.
+    origin_pattern='^https://([A-Za-z0-9.-]+)(:[0-9]+)?/?$'
+    [[ "$TALLY_URL" =~ $origin_pattern ]] || fail 'TALLY_URL must be an HTTPS origin such as https://tally.example.com:8443'
+    export TALLY_URL="https://${BASH_REMATCH[1]}:$selected_port"
+    [[ "$TALLY_HTTP_BIND" =~ ^(.+):[0-9]+$ ]] || fail 'TALLY_HTTP_BIND must include an address and port'
+    export TALLY_HTTP_BIND="${BASH_REMATCH[1]}:$selected_port"
+fi
 export TALLY_UPGRADE_STATE_DIR="$TALLY_DATA_DIR/upgrade" TALLY_UPGRADE_WEB_ORIGIN="$TALLY_URL"
 export TALLY_UPGRADE_TALLY_ROOT="$TALLY_INSTALL_DIR" TALLY_RUNTIME_MODE=combined TALLY_BINARY="$TALLY_INSTALL_DIR/tallyd"
 export TALLY_MAINTENANCE_DIR="$TALLY_DATA_DIR/maintenance"
@@ -89,17 +100,31 @@ if [ ! -f "$TALLY_ENV_FILE" ]; then
       TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_URL TALLY_HTTP_BIND TALLY_UPGRADE_STATE_DIR \
       TALLY_UPGRADE_WEB_ORIGIN TALLY_UPGRADE_TALLY_ROOT TALLY_RUNTIME_MODE TALLY_BINARY TALLY_MAINTENANCE_DIR TALLY_TLS_DIR > "$TALLY_ENV_FILE"
 fi
+# Preserve every other setting and secret when changing the application port.
+if [ -n "$selected_port" ]; then
+    updated="$(mktemp "$TALLY_CONFIG_DIR/.tally.env.XXXXXX")"
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "${line%%=*}" in
+            TALLY_URL|TALLY_HTTP_BIND|TALLY_UPGRADE_WEB_ORIGIN) write_env "${line%%=*}" ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done < "$TALLY_ENV_FILE" > "$updated"
+    for key in TALLY_URL TALLY_HTTP_BIND TALLY_UPGRADE_WEB_ORIGIN; do
+        if ! grep -q "^$key=" "$updated"; then write_env "$key" >> "$updated"; fi
+    done
+    mv "$updated" "$TALLY_ENV_FILE"
+fi
 # Existing services and clusters are never rewritten; native mode creates private Tally instances.
 if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
     progress "Preparing database packages (PostgreSQL: $pg_mode; ClickHouse: $ch_mode)..."
     if [ "$(uname -s)" = Darwin ]; then
         command -v brew >/dev/null || fail 'Install Homebrew from https://brew.sh, then rerun the installer'
         if [ "$pg_mode" = native ]; then
-            brew list postgresql@18 >/dev/null 2>&1 || brew install postgresql@18
+            database_package_installed brew-formula postgresql@18 || install_database_packages brew-formula postgres postgresql@18
             pg_bin="$(brew --prefix postgresql@18)/bin"
         fi
         if [ "$ch_mode" = native ]; then
-            brew list --cask clickhouse >/dev/null 2>&1 || brew install --cask clickhouse
+            database_package_installed brew-cask clickhouse || install_database_packages brew-cask clickhouse clickhouse
             ch_bin="$(brew --prefix)/bin/clickhouse"
         fi
     elif command -v apt-get >/dev/null; then
@@ -115,7 +140,7 @@ if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
             rm -f "$key"
             printf 'deb [signed-by=/usr/share/keyrings/tally-postgresql.asc] https://apt.postgresql.org/pub/repos/apt %s-pgdg main\n' "$codename" | sudo tee /etc/apt/sources.list.d/tally-postgresql.list >/dev/null
             sudo apt-get update
-            sudo apt-get install -y postgresql-18 postgresql-client-18
+            install_database_packages apt postgres postgresql-18 postgresql-client-18
         fi
         if [ "$ch_mode" = native ] && ! command -v clickhouse >/dev/null; then
             key="$(mktemp)"
@@ -124,7 +149,7 @@ if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
             rm -f "$key"
             printf 'deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=%s] https://packages.clickhouse.com/deb stable main\n' "$(dpkg --print-architecture)" | sudo tee /etc/apt/sources.list.d/clickhouse.list >/dev/null
             sudo apt-get update
-            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y clickhouse-server clickhouse-client
+            install_database_packages apt clickhouse clickhouse-server clickhouse-client clickhouse-common-static
         fi
     elif command -v yum >/dev/null || command -v dnf >/dev/null; then
         if command -v dnf >/dev/null; then pm=dnf; else pm=yum; fi
@@ -139,9 +164,9 @@ if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
                     [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 8 ] || fail 'Native PostgreSQL requires Enterprise Linux 8 or newer'
                     sudo "$pm" install -y "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$major-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm"
                     if [ "$major" -le 9 ]; then sudo "$pm" -qy module disable postgresql; fi
-                    sudo "$pm" install -y postgresql18-server postgresql18
+                    install_database_packages "$pm" postgres postgresql18-server postgresql18
                     ;;
-                fedora) sudo "$pm" install -y postgresql-server postgresql ;;
+                fedora) install_database_packages "$pm" postgres postgresql-server postgresql ;;
                 *) fail 'Native RPM PostgreSQL supports RHEL, Rocky, AlmaLinux, CentOS, Oracle Linux or Fedora; use existing/docker elsewhere' ;;
             esac
         fi
@@ -150,7 +175,7 @@ if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
             curl --proto '=https' -fsSL https://packages.clickhouse.com/rpm/clickhouse.repo -o "$repo_file"
             sudo install -m 644 "$repo_file" /etc/yum.repos.d/clickhouse.repo
             rm -f "$repo_file"
-            sudo "$pm" install -y clickhouse-server clickhouse-client
+            install_database_packages "$pm" clickhouse clickhouse-server clickhouse-client clickhouse-common-static
         fi
     else fail 'Native databases require Homebrew, apt, yum or dnf; select docker, apple or existing instead'; fi
 fi

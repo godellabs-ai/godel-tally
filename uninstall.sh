@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# Remove Tally's application and user services, retaining configuration and all database data.
+# Remove Tally and its user services; retain database data unless --remove-databases is selected.
 # Self-contained so it also works after a partial installation or with older release bundles.
 set -euo pipefail
 fail() { printf 'Tally: %s\n' "$*" >&2; exit 1; }
 log() { printf 'Tally: %s\n' "$*"; }
-dry_run=0
+dry_run=0; remove_databases=0
 for arg in "$@"; do
     case "$arg" in
+        --remove-databases) remove_databases=1 ;;
         --dry-run) dry_run=1 ;;
         --help)
             cat <<'HELP'
-Uninstall Tally: bash uninstall.sh [--dry-run]
+Uninstall Tally: bash uninstall.sh [--remove-databases] [--dry-run]
 Stops and removes Tally's user services and application files. Stops database
 containers owned by this installation. Retains configuration, credentials,
 database data, containers, volumes, and installed PostgreSQL/ClickHouse packages.
-Existing/shared database servers are never changed. No sudo is required.
+--remove-databases also deletes Tally's private database data, owned containers
+and owned volumes, and database packages recorded as installed by this installer.
+This permanently deletes the managed Tally databases. Back up first.
+Pre-existing packages, unrecorded volumes, and existing database servers are kept.
+Configuration, credentials, certificates, logs and backups are retained.
+Linux package removal uses sudo; ordinary uninstall does not.
 Use TALLY_CONFIG_DIR for a custom installation. --dry-run only shows the plan.
 HELP
             exit 0 ;;
@@ -76,10 +82,72 @@ for name in server postgres clickhouse; do
 done
 prefix="${TALLY_CONTAINER_PREFIX:-godel-tally}"
 [[ "$prefix" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail 'Invalid TALLY_CONTAINER_PREFIX'
+# Validate all deletion targets and receipts before stopping services.
+check_private_path() {
+    local target="${1%/}" parent
+    case "$target" in
+        ''|/|"$HOME"|/usr|/usr/local|/usr/local/bin|/opt|/etc|/bin|/sbin|/tmp|/var|/Users|/home|/var/lib|/usr/local/var|/opt/homebrew/var) fail "Unsafe database cleanup path: $target" ;;
+        /*) ;; *) fail 'Database cleanup paths must be absolute' ;;
+    esac
+    case "$target" in *$'\n'*|*$'\r'*|*/../*|*/..|*/./*|*/.|*//*) fail "Invalid database cleanup path: $target" ;; esac
+    case "$HOME/" in "$target/"*) fail 'Database cleanup path contains the home directory' ;; esac
+    parent="$target"
+    while [ "$parent" != / ]; do
+        # macOS ships these three system aliases; user-controlled symlinks are refused.
+        case "$parent" in /tmp|/var|/etc) ;; *) [ ! -L "$parent" ] || fail "Refusing symlinked cleanup path: $parent" ;; esac
+        parent="$(dirname "$parent")"
+    done
+}
+package_receipt="$config_dir/installed-packages"
+if [ "$remove_databases" = 1 ]; then
+    check_private_path "$data_dir"
+    check_private_path "$config_dir"
+    check_private_path "$install_dir"
+    [ ! -L "$package_receipt" ] || fail 'Refusing a symlinked package receipt'
+    for db in postgres clickhouse; do
+        check_private_path "$data_dir/$db"
+        check_private_path "$data_dir/containers"
+        case "$config_dir/" in "$data_dir/$db/"*) fail 'Database directory contains configuration' ;; esac
+        case "$install_dir/" in "$data_dir/$db/"*) fail 'Database directory contains application files' ;; esac
+        if [ "$db" = postgres ]; then mode="${TALLY_POSTGRES_MODE:-existing}"; else mode="${TALLY_CLICKHOUSE_MODE:-existing}"; fi
+        case "$mode" in
+            docker) engine=docker ;;
+            apple) engine=container ;;
+            native|existing) continue ;;
+            *) fail 'Invalid saved database mode' ;;
+        esac
+        volume_receipt="$data_dir/containers/$engine-$prefix-$db.volume"
+        [ ! -L "$volume_receipt" ] || fail 'Refusing a symlinked volume receipt'
+        if [ -f "$volume_receipt" ]; then
+            volume="$(cat "$volume_receipt")"
+            [[ "$volume" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || fail 'Invalid volume ownership receipt'
+        fi
+    done
+    if [ -f "$package_receipt" ]; then
+        while IFS= read -r receipt || [ -n "$receipt" ]; do
+            case "$receipt" in
+                'brew-formula|postgres|postgresql@18'|'brew-cask|clickhouse|clickhouse'|\
+                'apt|postgres|postgresql-18'|'apt|postgres|postgresql-client-18'|\
+                'dnf|postgres|postgresql18-server'|'dnf|postgres|postgresql18'|'dnf|postgres|postgresql-server'|'dnf|postgres|postgresql'|\
+                'yum|postgres|postgresql18-server'|'yum|postgres|postgresql18'|'yum|postgres|postgresql-server'|'yum|postgres|postgresql'|\
+                'apt|clickhouse|clickhouse-server'|'apt|clickhouse|clickhouse-client'|'apt|clickhouse|clickhouse-common-static'|\
+                'dnf|clickhouse|clickhouse-server'|'dnf|clickhouse|clickhouse-client'|'dnf|clickhouse|clickhouse-common-static'|\
+                'yum|clickhouse|clickhouse-server'|'yum|clickhouse|clickhouse-client'|'yum|clickhouse|clickhouse-common-static') ;;
+                *) fail "Invalid package ownership receipt: $receipt" ;;
+            esac
+            case "$os:$receipt" in darwin:brew-*|linux:apt\|*|linux:dnf\|*|linux:yum\|*) ;; *) fail 'Package receipt does not match this operating system' ;; esac
+        done < "$package_receipt"
+    fi
+fi
 log "Remove application files from $install_dir"
 log "Keep configuration and credentials in $config_dir"
-log "Keep database data and certificates in $data_dir"
-log 'Database packages and container volumes will be kept.'
+if [ "$remove_databases" = 1 ]; then
+    log 'Permanently remove managed database data and recorded database packages/volumes.'
+    log "Keep certificates, logs and backups in $data_dir"
+else
+    log "Keep database data and certificates in $data_dir"
+    log 'Database packages and container volumes will be kept.'
+fi
 units_removed=0
 for name in server postgres clickhouse; do
     unit="$(service_file "$name")"
@@ -99,18 +167,66 @@ for db in postgres clickhouse; do
     if [ "$db" = postgres ]; then mode="${TALLY_POSTGRES_MODE:-existing}"; else mode="${TALLY_CLICKHOUSE_MODE:-existing}"; fi
     case "$mode" in docker) engine=docker ;; apple) engine=container ;; *) continue ;; esac
     name="$prefix-$db"
-    [ -f "$data_dir/containers/$engine-$name" ] || continue
-    log "Stop the owned database container $name; keep its data"
+    marker="$data_dir/containers/$engine-$name"
+    [ -f "$marker" ] || { [ "$remove_databases" = 1 ] && [ -f "$marker.volume" ]; } || continue
+    log "Stop the owned database container $name"
+    if [ "$remove_databases" = 1 ]; then
+        log "Remove owned container $name"
+        if [ -f "$marker.volume" ]; then log "Remove owned volume $(cat "$marker.volume")"
+        else log "Keep volumes for $name: no volume ownership receipt exists"; fi
+    fi
     [ "$dry_run" = 0 ] || continue
     command -v "$engine" >/dev/null || fail "Start $engine and rerun uninstall to stop the owned database containers"
     if [ "$engine" = docker ]; then
         docker info >/dev/null || fail 'Start Docker and rerun uninstall'
-        if docker inspect "$name" >/dev/null 2>&1 && [ "$(docker inspect --format '{{.State.Running}}' "$name")" = true ]; then docker stop "$name"; fi
+        if [ -f "$marker" ] && docker inspect "$name" >/dev/null 2>&1 && [ "$(docker inspect --format '{{.State.Running}}' "$name")" = true ]; then docker stop "$name"; fi
     else
         running="$(container ls --quiet)" || fail 'Start Apple container and rerun uninstall'
-        if printf '%s\n' "$running" | grep -Fxq "$name"; then container stop "$name"; fi
+        if [ -f "$marker" ] && printf '%s\n' "$running" | grep -Fxq "$name"; then container stop "$name"; fi
+    fi
+    if [ "$remove_databases" = 1 ]; then
+        if [ -f "$marker" ] && "$engine" inspect "$name" >/dev/null 2>&1; then
+            if [ "$engine" = docker ]; then "$engine" rm "$name"; else "$engine" delete "$name"; fi
+        fi
+        if [ -f "$marker.volume" ]; then
+            volume="$(cat "$marker.volume")"
+            if "$engine" volume inspect "$volume" >/dev/null 2>&1; then "$engine" volume rm "$volume"; fi
+            rm -f "$marker.volume"
+        fi
+        rm -f "$marker"
     fi
 done
+if [ "$remove_databases" = 1 ]; then
+    deb_packages=(); rpm_packages=()
+    if [ -f "$package_receipt" ]; then
+        while IFS='|' read -r manager db package; do
+            if [ "$db" = postgres ]; then mode="${TALLY_POSTGRES_MODE:-existing}"; else mode="${TALLY_CLICKHOUSE_MODE:-existing}"; fi
+            [ "$mode" = native ] || continue
+            log "Remove installer-owned package $package ($manager)"
+            [ "$dry_run" = 0 ] || continue
+            case "$manager" in
+                brew-formula) if brew list --formula "$package" >/dev/null 2>&1; then HOMEBREW_NO_AUTOREMOVE=1 brew uninstall --formula "$package"; fi ;;
+                brew-cask) if brew list --cask "$package" >/dev/null 2>&1; then HOMEBREW_NO_AUTOREMOVE=1 brew uninstall --cask "$package"; fi ;;
+                apt) if [ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null)" = 'install ok installed' ]; then deb_packages+=("$package"); fi ;;
+                dnf|yum) if rpm -q "$package" >/dev/null 2>&1; then rpm_packages+=("$package"); fi ;;
+            esac
+        done < "$package_receipt"
+        # Low-level removal refuses external dependents instead of cascading into unowned packages.
+        if [ "${#deb_packages[@]}" -gt 0 ]; then sudo dpkg --remove "${deb_packages[@]}"; fi
+        if [ "${#rpm_packages[@]}" -gt 0 ]; then sudo rpm -e "${rpm_packages[@]}"; fi
+    else
+        log 'Keep database packages: this installation has no package ownership receipt.'
+    fi
+    for db in postgres clickhouse; do
+        if [ "$db" = postgres ]; then mode="${TALLY_POSTGRES_MODE:-existing}"; else mode="${TALLY_CLICKHOUSE_MODE:-existing}"; fi
+        [ "$mode" = native ] || continue
+        log "Delete private database data: $data_dir/$db"
+        [ "$dry_run" = 0 ] || continue
+        rm -rf -- "$data_dir/$db"
+        if [ "$db" = clickhouse ]; then rm -f "$config_dir/clickhouse.xml"; fi
+    done
+    [ "$dry_run" = 1 ] || rm -f "$package_receipt"
+fi
 if [ "$dry_run" = 1 ]; then log 'Dry run complete; no changes made.'; exit 0; fi
 if [ "$os" = linux ] && [ "$units_removed" = 1 ]; then systemctl --user daemon-reload; fi
 # Remove only known application files, preserving anything an operator added.
@@ -119,4 +235,5 @@ for helper in runtime-common.sh data-services.sh ensure-tally-tls.sh check-tls-h
 done
 rm -f "$install_dir/tallyd" "$install_dir/tallyd.new" "$install_dir/tally.sh" "$install_dir/postgres.sh" "$install_dir/clickhouse.sh" "$install_dir/uninstall.sh"
 rmdir "$install_dir/scripts" "$install_dir" 2>/dev/null || true
-log 'Tally uninstalled. Rerun the installer to reuse the retained configuration and databases.'
+if [ "$remove_databases" = 1 ]; then log 'Tally uninstalled and managed database cleanup completed. Configuration and certificates were retained.'
+else log 'Tally uninstalled. Rerun the installer to reuse the retained configuration and databases.'; fi

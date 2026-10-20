@@ -50,7 +50,7 @@ for db in postgres clickhouse; do
         if "$engine" volume inspect "$volume" >/dev/null 2>&1; then
             "$engine" volume rm "$volume"
         fi
-        rm -f "$marker"
+        rm -f "$marker" "$marker.volume"
         continue
     fi
     if [ "$action" = stop ]; then
@@ -75,7 +75,11 @@ for db in postgres clickhouse; do
             volume="${TALLY_CLICKHOUSE_VOLUME:-$prefix-clickhouse}"
             port="${TALLY_CLICKHOUSE_PORT:-8124}:8123"; mount=/var/lib/clickhouse
         fi
-        "$engine" volume inspect "$volume" >/dev/null 2>&1 || "$engine" volume create "$volume" >/dev/null
+        [[ "$volume" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || fail 'Invalid managed database volume name'
+        if ! "$engine" volume inspect "$volume" >/dev/null 2>&1; then
+            "$engine" volume create "$volume" >/dev/null
+            printf '%s\n' "$volume" > "$marker.volume"
+        fi
         credentials="$(mktemp "$TALLY_DATA_DIR/containers/.env.XXXXXX")"
         chmod 600 "$credentials"
         trap 'rm -f "${credentials:-}"' EXIT

@@ -1,4 +1,4 @@
-// Read-only contract fixture; see docs/managed-agent-connectors.md for primary sources.
+// Read-only contract fixture; setup and evidence scope: https://godel-labs.ai/docs/tally/connectors#attribution.
 const http = require('node:http');
 const provider = 'openai';
 http.createServer((req, res) => {

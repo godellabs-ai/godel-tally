@@ -10,6 +10,7 @@ case "$repo" in *[!A-Za-z0-9._/-]*|'') echo 'Invalid TALLY_GITHUB_REPO' >&2; exi
 if [ "${1:-}" = --help ]; then
     cat <<'HELP'
 Install Tally: bash install.sh [--db native|docker|apple|existing]
+  --port PORT           HTTPS port (default 8443; preserves saved port on reinstall)
   --postgres MODE       Override PostgreSQL mode independently
   --clickhouse MODE     Override ClickHouse mode independently
   --no-start            Install and register services without starting Tally
@@ -22,12 +23,27 @@ Run as your normal user. Only native Linux package installation uses sudo.
 HELP
     exit 0
 fi
-for arg in "$@"; do
-    if [ "$arg" = --dry-run ]; then
-        printf 'Platform: %s/%s\nRelease: %s (%s)\nDefault databases: native; overrides: %s\nService: %s\n' "$os" "$arch" "$version" "$repo" "$*" "$( [ "$os" = linux ] && echo 'systemd --user' || echo 'launchd LaunchAgent' )"
-        exit 0
-    fi
+# Validate options before fetching a release. Keep the original arguments for the runtime.
+args=("$@"); dry_run=0; selected_port='8443 (or saved port)'
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --port)
+            [ "$#" -ge 2 ] && [[ "$2" =~ ^[1-9][0-9]{3,4}$ ]] && [ "$2" -ge 1024 ] && [ "$2" -le 65535 ] || { echo 'Tally: --port must be between 1024 and 65535' >&2; exit 1; }
+            selected_port="$2"; shift 2 ;;
+        --db|--postgres|--clickhouse)
+            [ "$#" -ge 2 ] || { echo "Missing value for $1" >&2; exit 1; }
+            case "$2" in native|docker|apple|existing) ;; *) echo "Invalid database mode: $2" >&2; exit 1 ;; esac
+            shift 2 ;;
+        --dry-run) dry_run=1; shift ;;
+        --no-start|--no-service) shift ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
 done
+if [ "${#args[@]}" -gt 0 ]; then set -- "${args[@]}"; else set --; fi
+if [ "$dry_run" = 1 ]; then
+    printf 'Platform: %s/%s\nRelease: %s (%s)\nHTTPS port: %s\nDefault databases: native; overrides: %s\nService: %s\n' "$os" "$arch" "$version" "$repo" "$selected_port" "$*" "$( [ "$os" = linux ] && echo 'systemd --user' || echo 'launchd LaunchAgent' )"
+    exit 0
+fi
 command -v curl >/dev/null || { echo 'curl is required' >&2; exit 1; }
 command -v tar >/dev/null || { echo 'tar is required' >&2; exit 1; }
 printf 'Tally: installing for %s/%s\n' "$os" "$arch"

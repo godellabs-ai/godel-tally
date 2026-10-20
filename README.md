@@ -10,7 +10,7 @@ Open-source AI discovery, inventory, and governance — without storing prompts 
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-f59e0b.svg)](CHANGELOG.md)
 [![Built with Rust](https://img.shields.io/badge/Built_with-Rust-171717.svg)](Cargo.toml)
 
-[Try it](#try-tally) · [Connectors](#connect-the-sources-you-already-have) · [How it works](#how-it-works) · [Docs](docs/user-guide.md) · [Contribute](CONTRIBUTING.md)
+[Try it](#try-tally) · [Connectors](#connect-the-sources-you-already-have) · [How it works](#how-it-works) · [Docs](https://godel-labs.ai/docs/tally) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
@@ -21,7 +21,7 @@ assistant to company tools. Your approved vendor list sees none of it.
 Follow the relationships between people, devices, agents, MCP servers, providers, and models. See
 what is sanctioned, what needs review, and which source supplied the evidence.
 
-![Tally overview showing people, authorization states, agents, and data sources in the evaluation workspace](docs/images/tally-overview.png)
+![Tally overview showing people, authorization states, agents, and data sources in the evaluation workspace](.github/assets/tally-overview.png)
 
 *The built-in evaluation workspace. Real product names and realistic enterprise activity, generated for evaluation. No vendor connections are required.*
 
@@ -44,7 +44,10 @@ and the permissions they have; an inventory is not proof that every AI system ha
 Install the latest release on **Linux or macOS, amd64 or arm64**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh -o install-tally.sh && bash install-tally.sh
+curl -fsSL \
+  https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh \
+  -o install-tally.sh && \
+  bash install-tally.sh --port 8443
 ```
 
 The script downloads the matching binary from [GitHub Releases](https://github.com/godellabs-ai/godel-tally/releases/latest),
@@ -54,13 +57,16 @@ the binary; Docker, Node.js, and nginx are not required.
 
 Run as your normal user with Bash, curl, tar, and OpenSSL available. macOS needs
 [Homebrew](https://brew.sh); Linux needs sudo for native database packages and a working systemd user
-session. See the [installation guide](docs/quickstart.md) for supported package managers and service details.
+session. See the [installation guide](https://godel-labs.ai/docs/tally/installation) for supported package managers and service details.
 
-Open **https://localhost:8443** and create the first administrator account. The local certificate is
+Choose another HTTPS port with `--port`, for example `bash install-tally.sh --port 9443`.
+Reinstalling without this option keeps the saved port.
+
+Open **https://localhost:8443** (or your selected port) and create the first administrator account. The local certificate is
 self-signed. To use Docker or Apple containers for the databases, run `bash install-tally.sh --db docker`
-or `bash install-tally.sh --db apple`. [Existing databases](docs/quickstart.md#choose-database-deployment-independently)
+or `bash install-tally.sh --db apple`. [Existing databases](https://godel-labs.ai/docs/tally/database-options#existing-databases)
 are supported too. For native Rust/Next.js development with live reload, follow the
-[development setup](docs/quickstart.md#development).
+[development setup](https://godel-labs.ai/docs/tally/development).
 
 **No connectors ready yet?** Click **Add evaluation data** on an empty Overview. Follow GPT-4o, Claude Sonnet 4,
 Gemini 2.5 Pro, Llama 3.3, and other real models through a realistic enterprise workspace spanning
@@ -95,13 +101,16 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.se
 launchctl kickstart -k "gui/$(id -u)/ai.godel.tally.server"
 ```
 
-These commands control Tally; the databases keep running. See [service management](docs/quickstart.md#services-and-upgrades)
+These commands control Tally; the databases keep running. See [service management](https://godel-labs.ai/docs/tally/operations)
 for logs, startup at login, and database services.
 
 ### Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/uninstall.sh -o uninstall-tally.sh && bash uninstall-tally.sh
+curl -fsSL \
+  https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/uninstall.sh \
+  -o uninstall-tally.sh && \
+  bash uninstall-tally.sh
 ```
 
 The uninstaller removes Tally's application files and user services, and stops its private database
@@ -109,6 +118,19 @@ services and owned database containers. It **keeps configuration, credentials, d
 volumes, and PostgreSQL/ClickHouse packages** so you can reinstall without losing data. Existing database
 servers are untouched. Run `bash uninstall-tally.sh --dry-run` to preview, or set `TALLY_CONFIG_DIR` for
 a custom installation. New installations also include `~/.local/lib/godel-tally/uninstall.sh`.
+
+To also remove managed PostgreSQL and ClickHouse **and permanently delete their data**:
+
+```bash
+bash uninstall-tally.sh --remove-databases --dry-run
+bash uninstall-tally.sh --remove-databases
+```
+
+This removes private database data, owned containers, and packages/volumes recorded as created by
+the installer. Pre-existing packages, existing database servers, and unrecorded volumes are kept.
+Older installs without ownership records retain their packages. Configuration, certificates, logs,
+and backups outside the database directories remain. Back up before using this option; Linux package
+removal may use sudo. See [uninstall details](https://godel-labs.ai/docs/tally/operations#remove-databases).
 
 ## Connect the sources you already have
 
@@ -125,7 +147,7 @@ telemetry alone cannot identify a local agent or a stdio MCP server. Client hint
 a particular running agent.
 
 The [connector catalog](apps/web/lib/connector-catalog.ts), [sanitized fixtures](testdata/connectors),
-and [user guide](docs/user-guide.md) describe the implementations. Evaluation coverage demonstrates the
+and [user guide](https://godel-labs.ai/docs/tally/inventory-and-findings) describe the implementations. Evaluation coverage demonstrates the
 data model; it does not certify a live integration with each vendor.
 
 ## Metadata, with a purpose
@@ -140,7 +162,7 @@ sensitive data**: deploy and grant access accordingly.
 - Standalone access requires sign-in. The first account is an administrator; subsequent users need an invitation.
 - Administrators can preview and delete selected data categories or all operational data. Accounts, installation identity, and the built-in catalog are preserved.
 
-Read the [privacy and storage model](docs/data-model.md) and [security policy](SECURITY.md).
+Read the [privacy and storage model](https://godel-labs.ai/docs/tally/privacy-and-data) and [security policy](SECURITY.md).
 
 ## How it works
 
@@ -168,7 +190,7 @@ make run         # Run locally; Docker databases by default
 
 Release binaries are available for Linux and macOS on amd64 and arm64. The installer supports native,
 Docker, Apple-container, or existing databases, independently for PostgreSQL and ClickHouse.
-See [installation and operations](docs/quickstart.md) for deployment details.
+See [installation and operations](https://godel-labs.ai/docs/tally/installation) for deployment details.
 
 ### Tally and Gödel Gate
 
@@ -177,7 +199,7 @@ it does not, by itself, block a request at a provider, gateway, or endpoint.
 
 Gödel Gate adds enforcement capabilities and embeds Tally's discovery components. The Tally
 deletion screen uses the same target → preview → confirmation flow in both products. The
-[upgrade guide](docs/upgrade-to-gate.md) explains the cutover and migration boundaries. Gate requires Docker.
+[upgrade guide](https://godel-labs.ai/docs/tally/upgrade-to-gate) explains the cutover and migration boundaries. Gate requires Docker.
 
 ## Status and contributing
 
@@ -195,8 +217,8 @@ issues. Report security vulnerabilities through [SECURITY.md](SECURITY.md).
 
 | Explore | Link |
 | --- | --- |
-| Operate Tally | [User guide](docs/user-guide.md) · [Installation](docs/quickstart.md) · [FAQ](FAQ.md) |
-| Understand the internals | [Architecture](docs/architecture.md) · [AI estate](docs/ai-estate.md) · [Data model](docs/data-model.md) |
+| Operate Tally | [User guide](https://godel-labs.ai/docs/tally/inventory-and-findings) · [Installation](https://godel-labs.ai/docs/tally/installation) · [FAQ](FAQ.md) |
+| Understand the internals | [Architecture](https://godel-labs.ai/docs/tally/architecture) · [AI estate](https://godel-labs.ai/docs/tally/inventory-and-findings) · [Data model](https://godel-labs.ai/docs/tally/privacy-and-data) |
 | Build integrations | [OpenAPI](specs/openapi.json) · [JSON schemas](specs) · [Connector fixtures](testdata/connectors) |
 | Follow changes | [Changelog](CHANGELOG.md) |
 

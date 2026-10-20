@@ -80,3 +80,40 @@ start_service() {
         systemctl --user enable --now "tally-$name.service"
     fi
 }
+
+# Record only packages absent before this installation, including partial installs.
+# Receipts are data; uninstallation independently validates the manager/package allowlist.
+database_package_installed() {
+    case "$1" in
+        brew-formula) brew list --formula "$2" >/dev/null 2>&1 ;;
+        brew-cask) brew list --cask "$2" >/dev/null 2>&1 ;;
+        apt) [ "$(dpkg-query -W -f='${Status}' "$2" 2>/dev/null)" = 'install ok installed' ] ;;
+        dnf|yum) rpm -q "$2" >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+install_database_packages() {
+    local manager="$1" db="$2" package status=0 receipt
+    shift 2
+    local absent=() packages=("$@")
+    for package in "${packages[@]}"; do
+        if ! database_package_installed "$manager" "$package"; then absent+=("$package"); fi
+    done
+    case "$manager" in
+        brew-formula) brew install "${packages[@]}" || status=$? ;;
+        brew-cask) brew install --cask "${packages[@]}" || status=$? ;;
+        apt) sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" || status=$? ;;
+        dnf|yum) sudo "$manager" install -y "${packages[@]}" || status=$? ;;
+    esac
+    if [ "${#absent[@]}" -gt 0 ]; then
+        for package in "${absent[@]}"; do
+            if database_package_installed "$manager" "$package"; then
+                receipt="$manager|$db|$package"
+                if ! grep -Fxq "$receipt" "$TALLY_CONFIG_DIR/installed-packages" 2>/dev/null; then
+                    printf '%s\n' "$receipt" >> "$TALLY_CONFIG_DIR/installed-packages"
+                fi
+            fi
+        done
+    fi
+    return "$status"
+}

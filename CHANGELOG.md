@@ -1,50 +1,20 @@
 # Changelog
 
-Notable changes to Gödel Tally will be documented in this file.
+## [0.1.0] - 2026-10-21
 
-The project follows [Semantic Versioning](https://semver.org/) for tagged releases. While the version
-is below 1.0, minor releases may contain breaking API, schema, migration, or configuration changes.
+Initial public release of Gödel Tally, the open-source AI discovery, inventory, and governance application.
 
-## [0.1.2] - 2026-10-20
+- One executable with the HTTPS web console, authentication, API, connector worker, and registry embedded.
+- Linux and macOS binaries for amd64 and arm64, with a checksum-verified installer and user services.
+- Native PostgreSQL and ClickHouse by default; Docker, Apple containers, and existing databases are optional.
+- Selectable HTTPS port, visible installation progress, and start/stop/restart instructions.
+- Data-preserving uninstall, with optional removal of installer-owned databases, packages, and data.
+- AI source connectors, individual activity findings, inventory relationships, provider/model governance, and evaluation data.
+- Local accounts, invitations, password recovery, and configurable email delivery.
+- Metadata-only discovery with encrypted credentials and configurable AI-log retention.
+- Native Rust and Next.js development with live reload.
+- Guided upgrade to Gödel Gate; Gate and its embedded Tally deployment require Docker.
 
-- Read all Cookie header fields so native HTTPS/HTTP/2 sessions work when the browser sends
-  unrelated cookies before the Tally session. This fixes registration and login returning success
-  followed by an unauthorized session lookup, and ensures logout/session replacement revoke the
-  presented session in the same situation.
-- Explain when account creation succeeded but session verification failed, and offer sign-in
-  instead of another registration attempt. Remove the incorrect HTTPS/browser-storage diagnosis.
-- Add native HTTPS browser coverage for registration, login, logout, and session revocation with
-  split HTTP/2 cookies.
-
-## [0.1.1] - 2026-10-20
-
-- Accept PostgreSQL version banners with Homebrew and distribution suffixes, fixing native macOS
-  installation after successful database package installation.
-- Set the PostgreSQL LaunchAgent locale explicitly so macOS database startup works outside a terminal.
-- Show platform, release lookup, download progress, checksum verification, database preparation,
-  HTTPS setup, and service readiness during installation.
-- Add an uninstaller that removes application files and owned user services while retaining
-  configuration, database data, container volumes, and shared database packages.
-- Document start, stop, restart, and uninstall commands for standalone installations.
-- Build release archives locally with `make release-local`; remove GitHub Actions workflows.
-
-## [0.1.0] - 2026-10-19
-
-- Initial public release, with Linux and macOS binaries for amd64 and arm64. The production web
-  console is embedded in `tallyd`; PostgreSQL and ClickHouse are the only separate server processes.
-- The GitHub-hosted installer selects the latest platform binary, verifies its checksum, provisions
-  native databases, and starts a user service. Docker, Apple containers, and existing databases are
-  optional database modes; Gate upgrades still require Docker.
-- Native Rust and Next.js development retains live reload, with Docker databases by default.
-
-- The product is Gödel Tally. Packages, binaries, routes, configuration, database objects,
-  installation paths, and release assets use the Tally name, including `godel-tally`, `tallyd`,
-  `TALLY_*`, and `/api/v1/tally`.
-- This breaking rename requires fresh standalone configuration and databases; compatibility
-  aliases and migration of previous standalone installations are not provided.
-
-Tally remains alpha software; APIs, schemas, and operational behavior may change before 1.0.
+Tally is alpha software. APIs, schemas, and operational behavior may change before 1.0.
 
 [0.1.0]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.0
-[0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1
-[0.1.2]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.2

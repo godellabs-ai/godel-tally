@@ -131,7 +131,7 @@ export const CONNECTOR_SCHEMAS: Record<ConnectorSchemaId, ConnectorSchema> = {
   },
   defender_stream: {
     ...getConnectorDefinitionBySchemaId("defender_stream"), source_kind: "browser_upload", uploadAdapter:"defender_stream",
-    permissions: ["Defender Streaming API envelope export. For continuous ingestion, deploy the Event Hubs bridge and tally-collector receive --adapter defender-stream as described in docs/ai-estate.md."], fields: [],
+    permissions: ["Defender Streaming API envelope export. For continuous ingestion, deploy the Event Hubs bridge and tallyd collector receive --adapter defender-stream. See https://godel-labs.ai/docs/tally/connectors#uploads-scanner."], fields: [],
   },
   zscaler: {
     ...getConnectorDefinitionBySchemaId("zscaler"),

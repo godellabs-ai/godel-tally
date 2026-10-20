@@ -1,4 +1,4 @@
-// Contract fixtures: see docs/security-log-connectors.md for vendor sources.
+// Contract fixtures; setup and evidence scope: https://godel-labs.ai/docs/tally/connectors#security-sources.
 const http = require('node:http');
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');

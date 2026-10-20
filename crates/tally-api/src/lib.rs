@@ -10329,7 +10329,7 @@ pub enum OverviewState {
     info(
         title = "Gödel Tally API",
         description = "AI provider and model governance API",
-        version = "0.1.2"
+        version = "0.1.0"
     ),
     paths(
         estate::inventory,

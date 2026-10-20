@@ -18,7 +18,7 @@ help:
 	@echo "  make check       Format, lint, test and validate the embedded UI"
 	@echo "  make package     Create a release archive for this host architecture"
 	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
-	@echo "Customer installation: bash install.sh --db native (default)"
+	@echo "Customer installation: bash install.sh --port 8443 (native databases by default)"
 
 fmt:
 	cargo fmt --all

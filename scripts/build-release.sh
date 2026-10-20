@@ -4,7 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 [ "$(uname -s)" = Darwin ] || { echo 'The four-platform build requires a Mac with Xcode command-line tools.' >&2; exit 1; }
-command -v cargo-zigbuild >/dev/null || { echo 'Install cargo-zigbuild and Zig; see docs/releases.md.' >&2; exit 1; }
+command -v cargo-zigbuild >/dev/null || { echo 'Install cargo-zigbuild and Zig; see https://godel-labs.ai/docs/tally/development#release-builds.' >&2; exit 1; }
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "tallyd"))')"
@@ -28,4 +28,4 @@ done
     cat tallyd-{linux,darwin}-{amd64,arm64}.tar.gz.sha256 > SHA256SUMS
     shasum -a 256 --check SHA256SUMS
 )
-printf '\nRelease archives: %s\nSee docs/releases.md for runtime checks and manual publication.\n' "$TALLY_RELEASE_OUTPUT_DIR"
+printf '\nRelease archives: %s\nSee https://godel-labs.ai/docs/tally/development#release-builds for runtime checks and manual publication.\n' "$TALLY_RELEASE_OUTPUT_DIR"

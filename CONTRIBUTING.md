@@ -16,7 +16,7 @@ license.
 ## Set up the repository
 
 Required tool versions and local commands are documented in
-[docs/development.md](docs/development.md). The short path is:
+[Development guide](https://godel-labs.ai/docs/tally/development). The short path is:
 
 ```bash
 npm --prefix apps/web ci

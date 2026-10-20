@@ -5,7 +5,8 @@
 Tally stores one unique finding per governed subject and evidence kind, plus first/last use, count,
 source connector links, and optional endpoint, user, destination, and workload attribution. It does
 retain normalized AI-only telemetry in ClickHouse with configurable retention, alongside persistent
-agent inventory. Raw source payloads and non-AI logs are discarded. See [AI estate](docs/ai-estate.md).
+agent inventory. The Overview Findings table presents individual observations with server-side filters
+and pagination. Raw source payloads and non-AI logs are discarded. See [AI estate](https://godel-labs.ai/docs/tally/inventory-and-findings).
 
 ## What is a provider?
 
@@ -50,6 +51,8 @@ Deletion is permanent.
 
 ## Does the standalone API authenticate users?
 
-No. The standalone process binds to loopback by default and does not implement end-user
-authentication or TLS. Any shared or remote deployment must add an authenticating TLS proxy and
-network access controls.
+Yes. Standalone Tally serves HTTPS and authenticates local email-and-password accounts. The first
+registered user is an administrator; subsequent users need invitations. Sessions use secure,
+HttpOnly cookies, and administrative operations require the administrator role. Use a trusted
+certificate and the configured public origin for shared access. No nginx is required.
+See [accounts and email](https://godel-labs.ai/docs/tally/accounts).
