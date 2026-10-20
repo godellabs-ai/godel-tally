@@ -69,6 +69,8 @@ assets; the feature is explicit so Rust edits do not require rebuilding the UI.
 
 The installer and user-service lifecycle are documented in [quickstart](quickstart.md). The
 optional full container stack is started explicitly by `make docker-up`.
+Maintainers can build all four platform archives with `make release-local`; see
+[local releases](releases.md) for setup, validation, and publication.
 
 ## Configuration
 

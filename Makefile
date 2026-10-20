@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package docker-up docker-down
+.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package release-local docker-up docker-down
 
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 COMPOSE_FILE ?= docker-compose.yml
@@ -17,6 +17,7 @@ help:
 	@echo "  make docker-up   Optional full Docker deployment (builds the Tally image)"
 	@echo "  make check       Format, lint, test and validate the embedded UI"
 	@echo "  make package     Create a release archive for this host architecture"
+	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
 	@echo "Customer installation: bash install.sh --db native (default)"
 
 fmt:
@@ -85,6 +86,9 @@ build: registry-build web-build
 
 package: build
 	bash scripts/package-release.sh
+
+release-local:
+	bash scripts/build-release.sh
 
 data-up:
 	bash scripts/data-services.sh up

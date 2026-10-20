@@ -372,6 +372,26 @@ while true; do /bin/sleep 1; done
         result=self.run_script(ROOT/'install.sh',ok=False)
         self.assertIn('Could not resolve the latest Tally release',result.stderr)
         self.assertFalse((self.root/'installed').exists())
+    def test_release_archive_checks_architecture_and_includes_uninstaller(self):
+        import struct
+        binary=self.root/'tallyd'
+        binary.write_bytes(b'\x7fELF\x02\x01'+b'\0'*12+struct.pack('<H',183))
+        output=self.root/'release'
+        self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64',TALLY_RELEASE_BINARY=str(binary),
+                        TALLY_RELEASE_OUTPUT_DIR=str(output),TALLY_RELEASE_PLATFORM='linux-amd64')
+        result=self.run_script(ROOT/'scripts/package-release.sh',ok=False)
+        self.assertIn('architecture does not match',result.stderr)
+        self.assertFalse(output.exists())
+        self.env['TALLY_RELEASE_PLATFORM']='linux-arm64'
+        self.run_script(ROOT/'scripts/package-release.sh')
+        archive=output/'tallyd-linux-arm64.tar.gz'
+        with tarfile.open(archive) as package:
+            self.assertEqual(package.extractfile('tallyd').read(),binary.read_bytes())
+            self.assertEqual(package.extractfile('uninstall.sh').read(),(ROOT/'uninstall.sh').read_bytes())
+            self.assertIn('scripts/install-runtime.sh',package.getnames())
+            self.assertFalse(any(name.endswith('.env') for name in package.getnames()))
+        self.assertEqual((output/(archive.name+'.sha256')).read_text().split()[0],
+                         hashlib.sha256(archive.read_bytes()).hexdigest())
     def test_configuration_is_data_not_shell_code(self):
         payload=f'$(touch {self.root}/injected)'
         config=self.root/'env';config.write_text(f'TALLY_TEST_VALUE={payload}\n')

@@ -113,6 +113,7 @@ registration and prints a manual launcher; native databases still use user servi
 
 Release builds and tests run locally; this repository does not use GitHub Actions. Maintainers
 upload the four platform archives and `SHA256SUMS` to GitHub Releases after validation.
+See [local release builds](releases.md) for the maintainer commands.
 Database package availability and user-service setup depend on your host; see the prerequisites above.
 
 ## Uninstall

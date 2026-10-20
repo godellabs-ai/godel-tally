@@ -15,6 +15,7 @@ is below 1.0, minor releases may contain breaking API, schema, migration, or con
 - Add an uninstaller that removes application files and owned user services while retaining
   configuration, database data, container volumes, and shared database packages.
 - Document start, stop, restart, and uninstall commands for standalone installations.
+- Build release archives locally with `make release-local`; remove GitHub Actions workflows.
 
 ## [0.1.0] - 2026-10-19
 
