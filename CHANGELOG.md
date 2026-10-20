@@ -5,6 +5,17 @@ Notable changes to Gödel Tally will be documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) for tagged releases. While the version
 is below 1.0, minor releases may contain breaking API, schema, migration, or configuration changes.
 
+## [0.1.2] - 2026-10-20
+
+- Read all Cookie header fields so native HTTPS/HTTP/2 sessions work when the browser sends
+  unrelated cookies before the Tally session. This fixes registration and login returning success
+  followed by an unauthorized session lookup, and ensures logout/session replacement revoke the
+  presented session in the same situation.
+- Explain when account creation succeeded but session verification failed, and offer sign-in
+  instead of another registration attempt. Remove the incorrect HTTPS/browser-storage diagnosis.
+- Add native HTTPS browser coverage for registration, login, logout, and session revocation with
+  split HTTP/2 cookies.
+
 ## [0.1.1] - 2026-10-20
 
 - Accept PostgreSQL version banners with Homebrew and distribution suffixes, fixing native macOS
@@ -36,3 +47,4 @@ Tally remains alpha software; APIs, schemas, and operational behavior may change
 
 [0.1.0]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.0
 [0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1
+[0.1.2]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.2

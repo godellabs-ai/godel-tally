@@ -221,11 +221,13 @@ const RECORD_FAILED_ATTEMPT: &str = "UPDATE tally_auth_users SET
     WHERE user_id = $1";
 
 fn session_from_headers(headers: &HeaderMap) -> Option<String> {
+    // HTTP/2 can split Cookie into multiple fields (RFC 9113 section 8.2.3).
+    // Reading only the first field loses the session when another cookie precedes it.
     headers
-        .get(header::COOKIE)?
-        .to_str()
-        .ok()?
-        .split(';')
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(';'))
         .find_map(|part| {
             let (key, value) = part.trim().split_once('=')?;
             (key == "tally_session"
@@ -1130,6 +1132,45 @@ pub fn router(state: Arc<AuthState>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_cookie_is_found_in_combined_and_split_fields() {
+        let token = "a1".repeat(32);
+        let session = format!("tally_session={token}");
+        for fields in [
+            vec![session.clone()],
+            vec![format!("theme=dark; {session}; other=value")],
+            vec![
+                "theme=dark".to_owned(),
+                session.clone(),
+                "other=value".to_owned(),
+            ],
+            vec![session.clone(), "theme=dark".to_owned()],
+        ] {
+            let mut headers = HeaderMap::new();
+            for field in fields {
+                headers.append(header::COOKIE, HeaderValue::from_str(&field).unwrap());
+            }
+            assert_eq!(session_from_headers(&headers), Some(token.clone()));
+        }
+    }
+
+    #[test]
+    fn session_cookie_still_requires_its_exact_name_and_a_valid_token() {
+        assert_eq!(session_from_headers(&HeaderMap::new()), None);
+        for field in [
+            format!("other_session={}", "a".repeat(64)),
+            "tally_session=".to_owned(),
+            format!("tally_session={}", "a".repeat(63)),
+            format!("tally_session={}", "a".repeat(65)),
+            format!("tally_session={}", "g".repeat(64)),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.append(header::COOKIE, HeaderValue::from_static("theme=dark"));
+            headers.append(header::COOKIE, HeaderValue::from_str(&field).unwrap());
+            assert_eq!(session_from_headers(&headers), None);
+        }
+    }
 
     #[test]
     fn request_origin_uses_the_proxied_domain_or_ip() {

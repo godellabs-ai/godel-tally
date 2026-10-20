@@ -105,7 +105,7 @@ Stopping Tally leaves the databases running. Starting Tally also starts its mana
 or containers if needed. After a failed installation, rerun the installer; service commands apply once
 the application service has been registered.
 
-Pin a release with `TALLY_VERSION=v0.1.1 bash install-tally.sh` (substitute a published tag).
+Pin a release with `TALLY_VERSION=v0.1.2 bash install-tally.sh` (substitute a published tag).
 Run the installer again to update. `--no-start` installs and registers Tally without starting it;
 native database provisioning still starts the databases. `--no-service` skips Tally's service
 registration and prints a manual launcher; native databases still use user services.

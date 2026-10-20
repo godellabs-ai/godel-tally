@@ -58,8 +58,14 @@ export default function SignInPage() {
       // Any earlier session ended with this attempt, whether or not it succeeded.
       setSignedIn(null);
       if (!response.ok) throw new Error((await response.json()).error || "Sign in failed");
+      if (register) {
+        setRegister(false);
+        setStatus(current => current ? { ...current, first_user_registration_open: false } : current);
+      }
       const session = await fetch("/api/v1/auth/me", { cache: "no-store" });
-      if (!session.ok) throw new Error("Your browser did not keep the Tally session. Open Tally over HTTPS, or on localhost, and try again.");
+      if (!session.ok) throw new Error(register
+        ? "Your account was created, but Tally could not confirm your session. Try signing in."
+        : "Tally could not confirm your session. Please try signing in again.");
       router.replace("/"); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign in failed"); }
     finally { setBusy(false); }

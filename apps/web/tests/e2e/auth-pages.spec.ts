@@ -43,6 +43,25 @@ test("a failed sign-in reports the error and stays signed out", async ({ page })
   expect(logins).toHaveLength(1);
 });
 
+test("successful registration with a failed session check offers sign-in without blaming the browser", async ({ page }) => {
+  let registered = false;
+  await page.route("**/api/v1/auth/**", async route => {
+    const path = new URL(route.request().url()).pathname.split("/").at(-1);
+    if (path === "status") return route.fulfill({ json: { first_user_registration_open: !registered, email_configured: false } });
+    if (path === "register") { registered = true; return route.fulfill({ json: { user: { email: "ada@example.test" } } }); }
+    return route.fulfill({ status: 401, json: { error: "Sign in required" } });
+  });
+  await page.goto("/signin");
+  await page.getByLabel("First name", { exact: true }).fill("Ada");
+  await page.getByLabel("Last name", { exact: true }).fill("Admin");
+  await page.getByLabel("Email", { exact: true }).fill("ada@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password-123");
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(page.locator("form").getByRole("alert")).toHaveText("Your account was created, but Tally could not confirm your session. Try signing in.");
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.getByLabel("First name", { exact: true })).toHaveCount(0);
+});
+
 test("forgot password sends a link without revealing whether the account exists", async ({ page }) => {
   const { resets } = await mockAuth(page);
   await page.goto("/signin");

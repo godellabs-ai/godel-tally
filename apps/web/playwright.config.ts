@@ -8,6 +8,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: process.env.TALLY_WEB_URL ?? "http://127.0.0.1:8080",
+    ignoreHTTPSErrors: process.env.TALLY_E2E_IGNORE_HTTPS_ERRORS === "1",
     browserName: "chromium",
     storageState: process.env.TALLY_E2E_STORAGE_STATE,
     channel: process.env.CI ? undefined : "chrome",

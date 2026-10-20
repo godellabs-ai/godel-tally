@@ -23,6 +23,8 @@ impl Api {
         self.http
             .request(method.parse().unwrap(), format!("{}{path}", self.base))
             .header("origin", &self.base)
+            // Browsers may send unrelated cookies before the session in another field.
+            .header("cookie", "unrelated=fixture")
             .header("cookie", cookie)
             .json(&body)
             .send()

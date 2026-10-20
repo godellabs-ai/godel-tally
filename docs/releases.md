@@ -42,13 +42,26 @@ This checks the binary without starting databases or Tally services. Test native
 provisioning on a disposable machine; never run the installer against a developer's existing
 services just to validate a release.
 
+Against a fresh, disposable native HTTPS installation, verify actual browser sessions with:
+
+```bash
+cd apps/web
+TALLY_WEB_URL=https://localhost:8443 TALLY_E2E_NATIVE_AUTH=1 \
+  TALLY_E2E_IGNORE_HTTPS_ERRORS=1 \
+  npx playwright test tests/e2e/native-auth.spec.ts tests/e2e/auth-pages.spec.ts --workers=1
+```
+
+The native test creates a fixture administrator, verifies HTTP/2 authentication with unrelated
+cookies, and checks logout and failed-login revocation. It refuses a database that already has
+accounts. The HTTPS error override applies only to the isolated test browser's self-signed certificate.
+
 ## Publish
 
 Update version metadata and the changelog, regenerate registry/schema artifacts, and commit and
 push all changes before tagging. Upload only the four validated archives and their checksum file:
 
 ```bash
-version=v0.1.1
+version=v0.1.2
 git tag -a "$version" -m "Gödel Tally $version"
 git push origin "$version"
 gh release create "$version" --verify-tag --draft \
