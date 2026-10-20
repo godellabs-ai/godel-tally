@@ -44,12 +44,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
-      - name: Test release downloader
+      - name: Test installer and uninstaller
         run: |
           python3 scripts/test-deployment.py \
             Deployment.test_download_verifies_checksum_before_executing_installer \
             Deployment.test_pinned_download_selects_all_four_platforms \
             Deployment.test_unresolved_latest_release_never_executes_installer
+          python3 scripts/test-deployment.py \
+            Deployment.test_homebrew_postgres_version_with_packager_suffix \
+            Deployment.test_uninstall_native_macos_stops_only_private_tally_services \
+            Deployment.test_uninstall_retains_data_config_and_unknown_files \
+            Deployment.test_uninstall_partial_install_without_registered_services \
+            Deployment.test_uninstall_refuses_unsafe_paths_and_mismatched_installation \
+            Deployment.test_uninstall_dry_run_and_service_ownership \
+            Deployment.test_uninstall_stops_owned_containers_and_keeps_volumes
       - name: Build UI and registry
         run: make web-install web-build registry-build
       - name: Build binary
@@ -68,6 +76,9 @@ jobs:
           fi
           "$TALLY_RELEASE_BINARY" collector check
           bash scripts/package-release.sh
+      - name: Test native macOS installation
+        if: matrix.platform == 'darwin-arm64'
+        run: bash scripts/test-native-install.sh
       - uses: actions/upload-artifact@v4
         with:
           name: tally-${{ matrix.platform }}

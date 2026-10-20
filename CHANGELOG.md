@@ -5,6 +5,16 @@ Notable changes to Gödel Tally will be documented in this file.
 The project follows [Semantic Versioning](https://semver.org/) for tagged releases. While the version
 is below 1.0, minor releases may contain breaking API, schema, migration, or configuration changes.
 
+## [0.1.1] - 2026-10-20
+
+- Accept PostgreSQL version banners with Homebrew and distribution suffixes, fixing native macOS
+  installation after successful database package installation.
+- Show platform, release lookup, download progress, checksum verification, database preparation,
+  HTTPS setup, and service readiness during installation.
+- Add an uninstaller that removes application files and owned user services while retaining
+  configuration, database data, container volumes, and shared database packages.
+- Document start, stop, restart, and uninstall commands for standalone installations.
+
 ## [0.1.0] - 2026-10-19
 
 - Initial public release, with Linux and macOS binaries for amd64 and arm64. The production web
@@ -23,3 +33,4 @@ is below 1.0, minor releases may contain breaking API, schema, migration, or con
 Tally remains alpha software; APIs, schemas, and operational behavior may change before 1.0.
 
 [0.1.0]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.0
+[0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1

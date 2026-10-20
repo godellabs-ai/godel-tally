@@ -47,7 +47,9 @@ done
 if [ "$(uname -s)" = Linux ] && { [ "$no_service" = 0 ] || [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; }; then
     systemctl --user show-environment >/dev/null || fail 'A systemd user manager is required. Run from a login session, or use existing/container DBs with --no-service.'
 fi
-"$bundle/tallyd" --check-ui
+progress 'Checking the Tally executable and its web console...'
+"$bundle/tallyd" --check-ui >/dev/null
+progress "Installing application files in $TALLY_INSTALL_DIR"
 umask 077
 mkdir -p "$TALLY_INSTALL_DIR/scripts" "$TALLY_CONFIG_DIR" "$TALLY_DATA_DIR"
 chmod 700 "$TALLY_CONFIG_DIR" "$TALLY_DATA_DIR"
@@ -55,6 +57,7 @@ chmod 700 "$TALLY_CONFIG_DIR" "$TALLY_DATA_DIR"
 cp "$bundle/tallyd" "$TALLY_INSTALL_DIR/tallyd.new"
 chmod 755 "$TALLY_INSTALL_DIR/tallyd.new"
 mv "$TALLY_INSTALL_DIR/tallyd.new" "$TALLY_INSTALL_DIR/tallyd"
+cp "$bundle/uninstall.sh" "$TALLY_INSTALL_DIR/uninstall.sh"
 for helper in runtime-common.sh data-services.sh ensure-tally-tls.sh check-tls-host.sh upgrade-tally-to-gate.sh tally-source-db.py import-tally-users-to-gate.sql import-tally-registry-to-gate.sql validate-gate-registration.py; do cp "$bundle/scripts/$helper" "$TALLY_INSTALL_DIR/scripts/$helper"; done
 export TALLY_SECRET_KEY="${TALLY_SECRET_KEY:-$(openssl rand -hex 32)}"
 export TALLY_POSTGRES_PASSWORD="${TALLY_POSTGRES_PASSWORD:-$(openssl rand -hex 24)}"
@@ -88,6 +91,7 @@ if [ ! -f "$TALLY_ENV_FILE" ]; then
 fi
 # Existing services and clusters are never rewritten; native mode creates private Tally instances.
 if [ "$pg_mode" = native ] || [ "$ch_mode" = native ]; then
+    progress "Preparing database packages (PostgreSQL: $pg_mode; ClickHouse: $ch_mode)..."
     if [ "$(uname -s)" = Darwin ]; then
         command -v brew >/dev/null || fail 'Install Homebrew from https://brew.sh, then rerun the installer'
         if [ "$pg_mode" = native ]; then
@@ -164,8 +168,11 @@ if [ "$pg_mode" = native ]; then
         fi
     fi
     [ -x "$pg_bin/initdb" ] || fail 'PostgreSQL server binaries not found'
-    pg_version="$("$pg_bin/postgres" --version | awk '{print $NF}')"
-    [[ "${pg_version%%.*}" =~ ^[0-9]+$ ]] && [ "${pg_version%%.*}" -ge 15 ] || fail 'Tally requires PostgreSQL 15 or newer'
+    pg_banner="$("$pg_bin/postgres" --version)"
+    pg_major="$(postgres_major_version "$pg_banner")" || fail "Cannot read the PostgreSQL version: $pg_banner"
+    [ "$pg_major" -ge 15 ] || fail "Tally requires PostgreSQL 15 or newer; found: $pg_banner"
+    progress "Using $pg_banner"
+    progress 'Preparing the private PostgreSQL database...'
     if [ ! -f "$TALLY_DATA_DIR/postgres/PG_VERSION" ]; then
         password_file="$(mktemp "$TALLY_DATA_DIR/.pg-password.XXXXXX")"
         printf '%s\n' "$TALLY_POSTGRES_PASSWORD" > "$password_file"
@@ -174,6 +181,7 @@ if [ "$pg_mode" = native ]; then
     fi
     { printf '#!/usr/bin/env bash\nexec '; printf '%q ' "$pg_bin/postgres" -D "$TALLY_DATA_DIR/postgres" -h 127.0.0.1 -p "$TALLY_POSTGRES_PORT" -k ''; printf '\n'; } > "$TALLY_INSTALL_DIR/postgres.sh"
     write_service postgres "$TALLY_INSTALL_DIR/postgres.sh"
+    progress 'Starting the PostgreSQL user service...'
     start_service postgres
     ready=0
     for attempt in $(seq 1 60); do
@@ -188,6 +196,7 @@ if [ "$pg_mode" = native ]; then
     unset PGPASSWORD
 fi
 if [ "$ch_mode" = native ]; then
+    progress 'Preparing the private ClickHouse database...'
     ch_bin="${ch_bin:-$(command -v clickhouse)}"
     mkdir -p "$TALLY_DATA_DIR/clickhouse" "$TALLY_DATA_DIR/clickhouse/tmp" "$TALLY_DATA_DIR/clickhouse/user_files"
     if [ ! -f "$TALLY_CONFIG_DIR/clickhouse.xml" ]; then
@@ -206,6 +215,7 @@ XML
     fi
     { printf '#!/usr/bin/env bash\nexec '; printf '%q ' "$ch_bin" server "--config-file=$TALLY_CONFIG_DIR/clickhouse.xml"; printf '\n'; } > "$TALLY_INSTALL_DIR/clickhouse.sh"
     write_service clickhouse "$TALLY_INSTALL_DIR/clickhouse.sh"
+    progress 'Starting the ClickHouse user service...'
     start_service clickhouse
     ready=0
     for attempt in $(seq 1 90); do
@@ -223,7 +233,9 @@ XML
     fi
     rm -f "$headers"
 fi
+progress "Checking database services (PostgreSQL: $pg_mode; ClickHouse: $ch_mode)..."
 bash "$TALLY_INSTALL_DIR/scripts/data-services.sh" up
+progress 'Preparing HTTPS for the web console...'
 bash "$TALLY_INSTALL_DIR/scripts/ensure-tally-tls.sh"
 export TALLY_TLS_CERT_FILE="${TALLY_TLS_CERT_FILE:-$TALLY_TLS_DIR/tally.crt}"
 export TALLY_TLS_KEY_FILE="${TALLY_TLS_KEY_FILE:-$TALLY_TLS_DIR/tally.key}"
@@ -241,6 +253,7 @@ chmod 700 "$TALLY_INSTALL_DIR/tally.sh"
 if [ "$no_service" = 0 ]; then
     write_service server "$TALLY_INSTALL_DIR/tally.sh"
     if [ "$no_start" = 0 ]; then
+        progress "Starting Tally at $TALLY_URL; first-run database migrations may take a moment..."
         if [ "$(uname -s)" = Darwin ]; then
             launchctl bootout "gui/$(id -u)/ai.godel.tally.server" >/dev/null 2>&1 || true
         else systemctl --user stop tally-server.service >/dev/null 2>&1 || true; fi
@@ -248,12 +261,15 @@ if [ "$no_service" = 0 ]; then
         ready=0
         for attempt in $(seq 1 120); do
             if curl --fail --silent --max-time 3 --cacert "$TALLY_TLS_CERT_FILE" --connect-to "::127.0.0.1:${TALLY_HTTP_BIND##*:}" "$TALLY_URL/api/v1/tally/health/ready" >/dev/null 2>&1; then ready=1; break; fi
+            [ "$((attempt % 10))" != 0 ] || progress 'Waiting for Tally to become ready...'
             sleep 1
         done
         [ "$ready" = 1 ] || fail 'Tally did not become ready; inspect the tally-server user service logs'
     fi
 fi
 printf 'Tally installed. URL: %s\nConfiguration: %s\nManual start: bash "%s/tally.sh"\n' "$TALLY_URL" "$TALLY_ENV_FILE" "$TALLY_INSTALL_DIR"
-if [ "$(uname -s)" = Linux ]; then
+if [ "$no_service" = 1 ]; then
+    printf 'No Tally application service was registered (--no-service).\n'
+elif [ "$(uname -s)" = Linux ]; then
     printf 'Service: systemctl --user status tally-server\nFor boot before login, enable lingering: sudo loginctl enable-linger %s\n' "$(id -un)"
 else printf 'Service: launchctl print gui/%s/ai.godel.tally.server (starts at login)\n' "$(id -u)"; fi

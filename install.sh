@@ -30,8 +30,10 @@ for arg in "$@"; do
 done
 command -v curl >/dev/null || { echo 'curl is required' >&2; exit 1; }
 command -v tar >/dev/null || { echo 'tar is required' >&2; exit 1; }
+printf 'Tally: installing for %s/%s\n' "$os" "$arch"
 asset="tallyd-${os}-${arch}.tar.gz"
 if [ "$version" = latest ]; then
+    printf 'Tally: finding the latest release on GitHub...\n'
     # Resolve once so an update cannot mix an archive and checksums from different releases.
     release_url="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fLsS --retry 3 \
         -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")"
@@ -44,14 +46,18 @@ fi
 base="https://github.com/$repo/releases/download/$version"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-curl --proto '=https' --tlsv1.2 -fLsS --retry 3 "$base/$asset" -o "$stage/$asset"
+printf 'Tally: downloading %s (%s)...\n' "$version" "$asset"
+curl --proto '=https' --tlsv1.2 -fL --progress-bar --retry 3 "$base/$asset" -o "$stage/$asset"
+printf 'Tally: downloading and verifying the release checksum...\n'
 curl --proto '=https' --tlsv1.2 -fLsS --retry 3 "$base/SHA256SUMS" -o "$stage/SHA256SUMS"
 expected="$(awk -v name="$asset" '$2 == name {print $1}' "$stage/SHA256SUMS")"
 [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || { echo 'Release checksum missing or ambiguous' >&2; exit 1; }
 if command -v sha256sum >/dev/null; then actual="$(sha256sum "$stage/$asset" | cut -d ' ' -f1)"
 else actual="$(shasum -a 256 "$stage/$asset" | cut -d ' ' -f1)"; fi
 [ "$actual" = "$expected" ] || { echo 'Release checksum mismatch' >&2; exit 1; }
+printf 'Tally: checksum verified. Unpacking the release...\n'
 # These archives are flat and contain only the binary, documentation and installer helpers.
 if tar -tzf "$stage/$asset" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then echo 'Unsafe archive paths' >&2; exit 1; fi
 tar -xzf "$stage/$asset" -C "$stage"
+printf 'Tally: preparing the application and databases...\n'
 bash "$stage/scripts/install-runtime.sh" "$stage" "$@"

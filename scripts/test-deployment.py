@@ -35,7 +35,7 @@ elif name == 'pg_config': print(root/'bin')
 elif name == 'brew' and args[0] == '--prefix': print(root/'brew')
 elif name == 'initdb':
     data=pathlib.Path(args[args.index('-D')+1]); data.mkdir(parents=True,exist_ok=True); (data/'PG_VERSION').write_text('18')
-elif name == 'postgres' and '--version' in args: print('postgres (PostgreSQL) 18.6')
+elif name == 'postgres' and '--version' in args: print(os.environ.get('TEST_PG_BANNER','postgres (PostgreSQL) 18.6'))
 elif name == 'psql': print('1')
 elif name == 'openssl':
     if args[:2] == ['x509','-help']: print('-checkhost -checkip')
@@ -75,6 +75,7 @@ class Deployment(unittest.TestCase):
         self.home = self.root/'home with spaces'; self.home.mkdir()
         self.bundle = self.root/'bundle'; self.bundle.mkdir()
         shutil.copytree(ROOT/'scripts', self.bundle/'scripts')
+        shutil.copy(ROOT/'uninstall.sh', self.bundle/'uninstall.sh')
         (self.bundle/'tallyd').write_text('#!/bin/bash\n[ "$1" = --check-ui ]\n')
         (self.bundle/'tallyd').chmod(0o755)
         for path in [self.root/'brew/bin', self.root/'brew/postgresql@18/bin']:
@@ -134,6 +135,113 @@ class Deployment(unittest.TestCase):
         self.assertTrue((Path(self.env['TALLY_CONFIG_DIR'])/'clickhouse.xml').is_file())
         self.assertTrue((self.home/'.config/systemd/user/tally-postgres.service').is_file())
         self.assertTrue((self.home/'.config/systemd/user/tally-clickhouse.service').is_file())
+    def test_homebrew_postgres_version_with_packager_suffix(self):
+        self.env.update(TEST_OS='Darwin',TEST_PG_BANNER='postgres (PostgreSQL) 18.6 (Homebrew)')
+        result=self.install('--no-start')
+        self.assertIn('Using postgres (PostgreSQL) 18.6 (Homebrew)',result.stdout)
+        self.assertIn('Preparing the private PostgreSQL database',result.stdout)
+        self.assertNotIn('embedded UI is available',result.stdout)
+        self.assertTrue((self.home/'Library/LaunchAgents/ai.godel.tally.postgres.plist').is_file())
+    def test_postgres_version_parser_accepts_package_labels_and_rejects_unknown_banners(self):
+        for banner,expected in [('postgres (PostgreSQL) 18.6 (Homebrew)','18'),
+                                ('postgres (PostgreSQL) 15.10 (Ubuntu 15.10-1.pgdg24.04+1)','15'),
+                                ('postgres (PostgreSQL) 17.4','17'),('postgres (PostgreSQL) 14.18','14')]:
+            result=subprocess.run(['bash','-c','source "$1"; postgres_major_version "$2"','test',str(ROOT/'scripts/runtime-common.sh'),banner],text=True,capture_output=True,check=True)
+            self.assertEqual(result.stdout.strip(),expected)
+        self.env.update(TEST_PG_BANNER='postgres (PostgreSQL) 14.18 (Homebrew)')
+        result=self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,'--no-start',ok=False)
+        self.assertIn('requires PostgreSQL 15 or newer; found:',result.stderr)
+        self.assertFalse(any(c[0]=='initdb' for c in self.commands()))
+        self.env['TEST_PG_BANNER']='unexpected banner 18.6'
+        result=self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,'--no-start',ok=False)
+        self.assertIn('Cannot read the PostgreSQL version',result.stderr)
+    def test_uninstall_retains_data_config_and_unknown_files(self):
+        self.install('--db','existing','--no-start')
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'; saved=config.read_bytes()
+        data=Path(self.env['TALLY_DATA_DIR'])/'customer-data';data.write_text('keep me')
+        install=Path(self.env['TALLY_INSTALL_DIR'])
+        custom=install/'scripts/operator-notes';custom.write_text('keep me too')
+        self.run_script(ROOT/'uninstall.sh')
+        self.assertFalse((install/'tallyd').exists())
+        self.assertFalse((install/'uninstall.sh').exists())
+        self.assertFalse((self.home/'.config/systemd/user/tally-server.service').exists())
+        self.assertEqual(config.read_bytes(),saved)
+        self.assertEqual(data.read_text(),'keep me')
+        self.assertEqual(custom.read_text(),'keep me too')
+        self.run_script(ROOT/'uninstall.sh')
+        self.assertFalse(any(c[0] in ['brew','sudo','docker','container'] for c in self.commands()))
+    def test_uninstall_partial_install_without_registered_services(self):
+        # v0.1.0 persisted configuration and copied the binary before the version check.
+        self.env.update(TEST_OS='Darwin',TEST_PG_BANNER='unknown version')
+        self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,ok=False)
+        install=Path(self.env['TALLY_INSTALL_DIR'])
+        (install/'uninstall.sh').unlink()  # Older bundles did not include an uninstaller.
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'; saved=config.read_bytes()
+        before=self.commands()
+        self.run_script(ROOT/'uninstall.sh')
+        self.assertFalse(install.exists())
+        self.assertEqual(config.read_bytes(),saved)
+        self.assertFalse(any(c[0] in ['systemctl','launchctl','docker','container','brew','sudo']
+                             for c in self.commands()[len(before):]))
+    def test_uninstall_refuses_unsafe_paths_and_mismatched_installation(self):
+        self.install('--db','existing','--no-service')
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'; saved=config.read_text()
+        install=Path(self.env['TALLY_INSTALL_DIR'])
+        self.env['TALLY_INSTALL_DIR']=str(self.root/'another-install')
+        result=self.run_script(ROOT/'uninstall.sh',ok=False)
+        self.assertIn('does not match',result.stderr)
+        self.env['TALLY_INSTALL_DIR']=str(install)
+        config.write_text(saved.replace(f'TALLY_INSTALL_DIR={install}',f'TALLY_INSTALL_DIR={self.home}'))
+        result=self.run_script(ROOT/'uninstall.sh',ok=False)
+        self.assertIn('unsafe installation directory',result.stderr)
+        config.write_text(saved)
+        scripts=install/'scripts'; scripts.rename(install/'saved-scripts')
+        scripts.symlink_to(install/'saved-scripts',target_is_directory=True)
+        result=self.run_script(ROOT/'uninstall.sh',ok=False)
+        self.assertIn('symlinked installation',result.stderr)
+        self.assertTrue((install/'tallyd').exists())
+    def test_uninstall_dry_run_and_service_ownership(self):
+        self.install('--db','existing','--no-start')
+        install=Path(self.env['TALLY_INSTALL_DIR'])
+        before=self.commands()
+        result=self.run_script(ROOT/'uninstall.sh','--dry-run')
+        self.assertIn('no changes made',result.stdout)
+        self.assertTrue((install/'tallyd').exists())
+        self.assertFalse(any(c[0] in ['systemctl','launchctl','docker','container'] for c in self.commands()[len(before):]))
+        unit=self.home/'.config/systemd/user/tally-server.service'
+        unit.write_text('[Service]\nExecStart=/some/other/installation/tally.sh\n')
+        result=self.run_script(ROOT/'uninstall.sh',ok=False)
+        self.assertIn('does not belong to this installation',result.stderr)
+        self.assertTrue((install/'tallyd').exists())
+    def test_uninstall_native_macos_stops_only_private_tally_services(self):
+        self.env['TEST_OS']='Darwin'
+        self.install('--no-start')
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env';saved=config.read_bytes()
+        before=self.commands()
+        self.run_script(ROOT/'uninstall.sh')
+        commands=self.commands()[len(before):]
+        self.assertEqual([c[2] for c in commands if c[:2]==['launchctl','bootout']],
+                         ['gui/1000/ai.godel.tally.'+name for name in ['server','postgres','clickhouse']])
+        self.assertFalse(any(c[0]=='brew' for c in commands))
+        self.assertFalse(list((self.home/'Library/LaunchAgents').glob('ai.godel.tally.*.plist')))
+        self.assertEqual(config.read_bytes(),saved)
+        self.assertTrue((Path(self.env['TALLY_DATA_DIR'])/'postgres/PG_VERSION').exists())
+    def test_uninstall_stops_owned_containers_and_keeps_volumes(self):
+        for mode,engine in [('docker','docker'),('apple','container')]:
+            with self.subTest(mode=mode):
+                # A separate config per mode avoids switching an existing installation's DBs.
+                self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64',TALLY_CONTAINER_PREFIX='test-'+mode,
+                                TALLY_CONFIG_DIR=str(self.root/('config-'+mode)))
+                self.install('--db',mode,'--no-start')
+                foreign=self.root/'containers/unrelated';foreign.write_text('running')
+                before=self.commands()
+                self.run_script(ROOT/'uninstall.sh')
+                self.run_script(ROOT/'uninstall.sh')
+                commands=[c for c in self.commands()[len(before):] if c[0]==engine]
+                self.assertEqual(sum(c[1]=='stop' for c in commands),2)
+                self.assertFalse(any(c[1] in ['rm','delete','volume','prune'] for c in commands))
+                self.assertEqual(foreign.read_text(),'running')
+                self.assertTrue((self.root/('config-'+mode)/'tally.env').exists())
     def test_docker_and_apple_create_once_then_reuse_without_deleting_data(self):
         for engine, mode, platform, arch in [('docker','docker','Linux','x86_64'),('container','apple','Darwin','arm64')]:
             self.env.update(TALLY_DB_MODE=mode,TEST_OS=platform,TEST_ARCH=arch,TALLY_CONTAINER_PREFIX=f'test-{mode}')
@@ -223,7 +331,11 @@ while true; do /bin/sleep 1; done
         checksum=hashlib.sha256(archive.read_bytes()).hexdigest()
         sums=release/'SHA256SUMS';sums.write_text(f'{checksum}  {archive.name}\n')
         self.env['BOOTSTRAP_SOURCE']=str(release)
-        self.run_script(ROOT/'install.sh','--db','existing')
+        result=self.run_script(ROOT/'install.sh','--db','existing')
+        stages=['installing for linux/amd64','finding the latest release','downloading v0.1.0',
+                'downloading and verifying','checksum verified','preparing the application']
+        offsets=[result.stdout.index(stage) for stage in stages]
+        self.assertEqual(offsets,sorted(offsets))
         self.assertTrue((self.root/'installed').exists())
         urls=[next(a for a in c if a.startswith('https://')) for c in self.commands() if c[0]=='curl']
         self.assertEqual(urls,[

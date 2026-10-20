@@ -73,6 +73,43 @@ records have their own identities; no credentials, scheduled polling, or actual 
 
 Then connect one real source, sync it, and follow a finding back to its evidence.
 
+### Start, stop, and restart
+
+After installation, Tally runs as your user. On **Linux**:
+
+```bash
+systemctl --user start tally-server
+systemctl --user stop tally-server
+systemctl --user restart tally-server
+systemctl --user status tally-server
+```
+
+On **macOS**:
+
+```bash
+# Stop
+launchctl bootout "gui/$(id -u)/ai.godel.tally.server"
+# Start again after stopping
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.server.plist"
+# Restart a loaded service
+launchctl kickstart -k "gui/$(id -u)/ai.godel.tally.server"
+```
+
+These commands control Tally; the databases keep running. See [service management](docs/quickstart.md#services-and-upgrades)
+for logs, startup at login, and database services.
+
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/uninstall.sh -o uninstall-tally.sh && bash uninstall-tally.sh
+```
+
+The uninstaller removes Tally's application files and user services, and stops its private database
+services and owned database containers. It **keeps configuration, credentials, database data, container
+volumes, and PostgreSQL/ClickHouse packages** so you can reinstall without losing data. Existing database
+servers are untouched. Run `bash uninstall-tally.sh --dry-run` to preview, or set `TALLY_CONFIG_DIR` for
+a custom installation. New installations also include `~/.local/lib/godel-tally/uninstall.sh`.
+
 ## Connect the sources you already have
 
 | Category | Sources |

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Shared by installers, local development and service launchers. Bash 3.2 compatible.
 fail() { printf 'Tally: %s\n' "$*" >&2; exit 1; }
+progress() { printf 'Tally: %s\n' "$*"; }
+# Package managers append labels such as "(Homebrew)" or "(Ubuntu ...)".
+postgres_major_version() {
+    local banner="$1" pattern='^postgres \(PostgreSQL\) ([0-9]+)([. ][^[:cntrl:]]*)?$'
+    [[ "$banner" =~ $pattern ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}"
+}
 load_env() {
     local line key
     [ -f "$1" ] || return 0

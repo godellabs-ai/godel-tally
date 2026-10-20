@@ -75,6 +75,7 @@ on an existing installation: migrate data and update the configuration explicitl
 Linux:
 
 ```bash
+systemctl --user start tally-server
 systemctl --user status tally-server
 journalctl --user -u tally-server -f
 systemctl --user restart tally-server
@@ -89,15 +90,22 @@ macOS:
 
 ```bash
 launchctl print "gui/$(id -u)/ai.godel.tally.server"
-launchctl kickstart -k "gui/$(id -u)/ai.godel.tally.server"
+# Stop
 launchctl bootout "gui/$(id -u)/ai.godel.tally.server"
+# Start after stopping (loads the LaunchAgent again)
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.server.plist"
+# Restart a loaded service
+launchctl kickstart -k "gui/$(id -u)/ai.godel.tally.server"
 tail -f ~/.local/share/godel-tally/server.log
 ```
 
 LaunchAgents start at login, not before a user logs in. Native database LaunchAgents use labels
 `ai.godel.tally.postgres` and `ai.godel.tally.clickhouse`.
+Stopping Tally leaves the databases running. Starting Tally also starts its managed database services
+or containers if needed. After a failed installation, rerun the installer; service commands apply once
+the application service has been registered.
 
-Pin a release with `TALLY_VERSION=v0.1.0 bash install-tally.sh` (substitute a published tag).
+Pin a release with `TALLY_VERSION=v0.1.1 bash install-tally.sh` (substitute a published tag).
 Run the installer again to update. `--no-start` installs and registers Tally without starting it;
 native database provisioning still starts the databases. `--no-service` skips Tally's service
 registration and prints a manual launcher; native databases still use user services.
@@ -107,6 +115,27 @@ The release workflow builds all four platform artifacts and `SHA256SUMS` on `v*`
 workflow run builds downloadable CI artifacts without publishing a GitHub Release. Each binary is
 smoke-tested on its matching operating system and architecture. Database package availability and
 user-service setup depend on your host; see the prerequisites above.
+
+## Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/uninstall.sh -o uninstall-tally.sh
+bash uninstall-tally.sh --dry-run
+bash uninstall-tally.sh
+```
+
+Run as the installing user, without sudo. For a custom configuration directory, prefix the command
+with `TALLY_CONFIG_DIR=/absolute/config/path`. The script also works with partially installed v0.1.0
+deployments. New release bundles install a local copy at `~/.local/lib/godel-tally/uninstall.sh`.
+
+Uninstall stops and removes Tally's application and native database user services, stops database
+containers marked as owned by this installation, and removes known application files. Docker or
+Apple container must be available to stop owned containers. Other installations' service files are
+rejected. Existing/shared databases and unrelated containers are never stopped.
+
+Configuration (including the encryption key), database data, certificates, containers, volumes,
+and database packages are retained. The installer can reuse them on the next installation.
+Files added by an operator inside the installation directory are retained too.
 
 ## Use your existing HTTPS certificate
 
