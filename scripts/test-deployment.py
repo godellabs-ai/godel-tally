@@ -376,6 +376,9 @@ while true; do /bin/sleep 1; done
         import struct
         binary=self.root/'tallyd'
         binary.write_bytes(b'\x7fELF\x02\x01'+b'\0'*12+struct.pack('<H',183))
+        if os.uname().sysname == 'Darwin':
+            subprocess.run(['/usr/bin/xattr', '-w', 'com.apple.metadata:tally-test',
+                            'fixture', str(binary)], check=True)
         output=self.root/'release'
         self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64',TALLY_RELEASE_BINARY=str(binary),
                         TALLY_RELEASE_OUTPUT_DIR=str(output),TALLY_RELEASE_PLATFORM='linux-amd64')
@@ -390,6 +393,8 @@ while true; do /bin/sleep 1; done
             self.assertEqual(package.extractfile('uninstall.sh').read(),(ROOT/'uninstall.sh').read_bytes())
             self.assertIn('scripts/install-runtime.sh',package.getnames())
             self.assertFalse(any(name.endswith('.env') for name in package.getnames()))
+            self.assertFalse(any(part.startswith('._') for name in package.getnames()
+                                 for part in Path(name).parts))
         self.assertEqual((output/(archive.name+'.sha256')).read_text().split()[0],
                          hashlib.sha256(archive.read_bytes()).hexdigest())
     def test_configuration_is_data_not_shell_code(self):

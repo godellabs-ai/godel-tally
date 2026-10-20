@@ -40,6 +40,7 @@ cp LICENSE README.md uninstall.sh "$stage/"
 mkdir "$stage/scripts"
 for helper in install-runtime.sh runtime-common.sh data-services.sh ensure-tally-tls.sh check-tls-host.sh upgrade-tally-to-gate.sh tally-source-db.py import-tally-users-to-gate.sql import-tally-registry-to-gate.sql validate-gate-registration.py; do cp "scripts/$helper" "$stage/scripts/"; done
 asset="tallyd-$platform.tar.gz"
-tar -czf "$output/$asset" -C "$stage" tallyd scripts LICENSE README.md uninstall.sh
+# Keep macOS extended attributes/resource forks out of cross-platform archives.
+COPYFILE_DISABLE=1 tar -czf "$output/$asset" -C "$stage" tallyd scripts LICENSE README.md uninstall.sh
 (cd "$output"; if command -v sha256sum >/dev/null; then sha256sum "$asset"; else shasum -a 256 "$asset"; fi) > "$output/$asset.sha256"
 printf 'Created %s/%s\n' "$output" "$asset"
