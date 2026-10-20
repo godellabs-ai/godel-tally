@@ -111,10 +111,9 @@ native database provisioning still starts the databases. `--no-service` skips Ta
 registration and prints a manual launcher; native databases still use user services.
 `--dry-run` describes platform selection without making changes.
 
-The release workflow builds all four platform artifacts and `SHA256SUMS` on `v*` tags. A manual
-workflow run builds downloadable CI artifacts without publishing a GitHub Release. Each binary is
-smoke-tested on its matching operating system and architecture. Database package availability and
-user-service setup depend on your host; see the prerequisites above.
+Release builds and tests run locally; this repository does not use GitHub Actions. Maintainers
+upload the four platform archives and `SHA256SUMS` to GitHub Releases after validation.
+Database package availability and user-service setup depend on your host; see the prerequisites above.
 
 ## Uninstall
 

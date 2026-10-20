@@ -2,7 +2,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-for script in install.sh uninstall.sh dev-run.sh prod-run.sh scripts/{runtime-common,data-services,install-runtime,package-release,docker-run,docker-upgrade,upgrade-tally-to-gate,test-native-install}.sh; do bash -n "$script"; done
+for script in install.sh uninstall.sh dev-run.sh prod-run.sh scripts/{runtime-common,data-services,install-runtime,package-release,docker-run,docker-upgrade,upgrade-tally-to-gate}.sh; do bash -n "$script"; done
 python3 scripts/test-deployment.py
 python3 scripts/test-upgrade-runtime.py
 python3 scripts/test-upgrade-cutover.py
