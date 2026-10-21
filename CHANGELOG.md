@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.1.2] - 2026-10-22
+
+- Resume interrupted PostgreSQL and ClickHouse downloads instead of restarting them. Each attempt continues from the data already received, a stalled connection is reopened, and rerunning the installer after a failure or Ctrl+C resumes the partial download.
+- Download ClickHouse for Linux from ClickHouse's official package repository, `packages.clickhouse.com`, and fall back to the GitHub release. Every source must match the pinned SHA-256 checksum.
+- Show how much of each database has downloaded and the current speed every 10 seconds.
+- Stop in-progress database transfers when setup is cancelled, so a rerun never shares a partial download with a leftover transfer.
+- Wait for the macOS service to finish stopping its databases before uninstall cleanup, instead of reporting that Tally is still running.
 - Reject occupied private database ports when another service listens on all IPv4 addresses, including macOS where a loopback bind alone can miss that listener. Report the affected database and port before starting either database.
 
 ## [0.1.1] - 2026-10-21
@@ -36,3 +43,5 @@ Tally is alpha software. APIs, schemas, and operational behavior may change befo
 [0.1.0]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.0
 
 [0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1
+
+[0.1.2]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.2

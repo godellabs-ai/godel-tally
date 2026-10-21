@@ -1,6 +1,6 @@
 {
   "name": "godel-tally-web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Web console for the Gödel Tally AI inventory and governance service",
   "license": "Apache-2.0",
