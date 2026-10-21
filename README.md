@@ -142,6 +142,11 @@ exits or fails repeated health checks, the supervisor stops the application and 
 database; the user service manager restarts the stack. A manual stop keeps it stopped.
 Container and existing database lifecycles stay separate.
 
+Private PostgreSQL uses local port `5433` and ClickHouse uses `8124` by default.
+If another service already uses either port, Tally reports the database and port
+and refuses startup before starting either database. It leaves that service alone
+and does not automatically select another port.
+
 With `--no-service`, run `bash ~/.godel-tally/app/tally.sh` and stop with Ctrl+C.
 Private database logs are `~/.godel-tally/data/postgres.log` and `clickhouse.log`.
 See [service management](https://godel-labs.ai/docs/tally/operations) for details.
@@ -251,6 +256,12 @@ fixtures, privacy improvements, and feedback on the review workflow.
 
 ```bash
 make check       # Build UI, format-check, lint, test, and verify generated contracts
+```
+
+Check occupied PostgreSQL and ClickHouse ports against a built binary without starting databases:
+
+```bash
+python3 scripts/test-supervisor-ports.py --binary /path/to/tallyd
 ```
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md). To propose connector support, include the source,

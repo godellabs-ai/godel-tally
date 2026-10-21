@@ -2,7 +2,8 @@
 use std::{
     fmt::Write as _,
     fs::{File, OpenOptions},
-    net::{Ipv4Addr, TcpListener},
+    io::ErrorKind,
+    net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::Stdio,
     time::{Duration, Instant},
@@ -272,19 +273,35 @@ async fn shutdown_signal() -> Result<()> {
     Ok(())
 }
 
+fn reserve_database_port(database: &str, port: u16) -> Result<TcpListener> {
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    // On macOS, SO_REUSEADDR can let a loopback bind succeed while another
+    // process listens on 0.0.0.0. Check for a listener before reserving the port.
+    match TcpStream::connect_timeout(&address, Duration::from_millis(250)) {
+        Ok(_) => {
+            bail!("{database} port {port} is already in use; choose a free Tally database port")
+        }
+        Err(error) if error.kind() == ErrorKind::ConnectionRefused => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("{database} port {port} is unavailable; check local network access")
+            });
+        }
+    }
+    TcpListener::bind(address).with_context(|| {
+        format!("{database} port {port} is already in use or unavailable; choose a free Tally database port")
+    })
+}
+
 async fn supervise(databases: &Databases, processes: &mut Vec<Process>) -> Result<()> {
     // Refuse a port collision before starting either database. Never adopt another server.
     let mut ports = Vec::new();
-    for (enabled, port) in [
-        (databases.postgres, databases.pg_port),
-        (databases.clickhouse, databases.ch_port),
+    for (database, enabled, port) in [
+        ("PostgreSQL", databases.postgres, databases.pg_port),
+        ("ClickHouse", databases.clickhouse, databases.ch_port),
     ] {
         if enabled {
-            ports.push(
-                TcpListener::bind((Ipv4Addr::LOCALHOST, port)).with_context(|| {
-                    format!("port {port} is already in use; choose a free Tally database port")
-                })?,
-            );
+            ports.push(reserve_database_port(database, port)?);
         }
     }
     drop(ports);

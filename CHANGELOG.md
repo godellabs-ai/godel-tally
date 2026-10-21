@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reject occupied private database ports when another service listens on all IPv4 addresses, including macOS where a loopback bind alone can miss that listener. Report the affected database and port before starting either database.
+
 ## [0.1.1] - 2026-10-21
 
 - Keep fresh installations under `~/.godel-tally`, including configuration, scripts, application and database binaries, persistent data, logs, and certificates. Set `TALLY_HOME` to choose another root.
