@@ -14,13 +14,13 @@ for arg in "$@"; do
 Uninstall Tally: bash uninstall.sh [--remove-databases] [--dry-run]
 Stops and removes Tally's user services and application files. Stops database
 containers owned by this installation. Retains configuration, credentials,
-database data, containers, volumes, and installed PostgreSQL/ClickHouse packages.
+database data, private runtime downloads, containers, volumes, and legacy system packages.
 --remove-databases also deletes Tally's private database data, owned containers
-and owned volumes, and database packages recorded as installed by this installer.
+and owned volumes, downloaded private runtimes, and recorded legacy database packages.
 This permanently deletes the managed Tally databases. Back up first.
 Pre-existing packages, unrecorded volumes, and existing database servers are kept.
 Configuration, credentials, certificates, logs and backups are retained.
-Linux package removal uses sudo; ordinary uninstall does not.
+New private installations never use sudo. Removing recorded legacy Linux packages may use sudo.
 Use TALLY_CONFIG_DIR for a custom installation. --dry-run only shows the plan.
 HELP
             exit 0 ;;
@@ -29,7 +29,10 @@ HELP
 done
 [ "$(id -u)" != 0 ] || fail 'Run uninstall as the user who installed Tally, without sudo.'
 case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; *) fail 'Tally supports Linux and macOS.' ;; esac
-config_dir="${TALLY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/godel-tally}"
+tally_home="${TALLY_HOME:-$HOME/.godel-tally}"
+legacy_config="${XDG_CONFIG_HOME:-$HOME/.config}/godel-tally"
+config_dir="${TALLY_CONFIG_DIR:-$tally_home/config}"
+if [ -z "${TALLY_HOME:-}" ] && [ -z "${TALLY_CONFIG_DIR:-}" ] && [ ! -f "$config_dir/tally.env" ] && [ -f "$legacy_config/tally.env" ]; then config_dir="$legacy_config"; fi
 config_file="$config_dir/tally.env"
 saved_install_dir=
 requested_install_dir="${TALLY_INSTALL_DIR:-}"
@@ -37,15 +40,16 @@ if [ -f "$config_file" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
         key="${line%%=*}"; value="${line#*=}"
         case "$key" in
-            TALLY_INSTALL_DIR|TALLY_DATA_DIR|TALLY_POSTGRES_MODE|TALLY_CLICKHOUSE_MODE|TALLY_CONTAINER_PREFIX)
+            TALLY_INSTALL_DIR|TALLY_DATA_DIR|TALLY_RUNTIME_DIR|TALLY_POSTGRES_MODE|TALLY_CLICKHOUSE_MODE|TALLY_CONTAINER_PREFIX)
                 [ "$key" != "$line" ] || fail "Invalid configuration in $config_file"
                 [ "$key" != TALLY_INSTALL_DIR ] || saved_install_dir="$value"
                 export "$key=$value" ;;
         esac
     done < "$config_file"
 fi
-install_dir="${TALLY_INSTALL_DIR:-$HOME/.local/lib/godel-tally}"
-data_dir="${TALLY_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/godel-tally}"
+install_dir="${TALLY_INSTALL_DIR:-$tally_home/app}"
+data_dir="${TALLY_DATA_DIR:-$tally_home/data}"
+runtime_dir="${TALLY_RUNTIME_DIR:-$tally_home/runtime}"
 install_dir="${install_dir%/}"
 case "$install_dir" in
     ''|/|"$HOME"|/usr|/usr/local|/usr/local/bin|/opt|/etc|/bin|/sbin|/tmp|/var|/Users|/home) fail 'Refusing an unsafe installation directory' ;;
@@ -103,6 +107,13 @@ if [ "$remove_databases" = 1 ]; then
     check_private_path "$data_dir"
     check_private_path "$config_dir"
     check_private_path "$install_dir"
+    check_private_path "$runtime_dir"
+    for protected in "$data_dir" "$config_dir" "$install_dir"; do
+        case "$protected/" in "$runtime_dir/"*) fail 'Runtime cleanup directory contains settings, data, or application files' ;; esac
+    done
+    if [ -e "$runtime_dir" ]; then
+        [ -f "$runtime_dir/.tally-runtime" ] && [ ! -L "$runtime_dir/.tally-runtime" ] && [ "$(cat "$runtime_dir/.tally-runtime")" = "$config_dir" ] || fail 'Private runtime ownership marker is missing or belongs to another installation; refusing runtime cleanup'
+    fi
     [ ! -L "$package_receipt" ] || fail 'Refusing a symlinked package receipt'
     for db in postgres clickhouse; do
         check_private_path "$data_dir/$db"
@@ -196,7 +207,18 @@ for db in postgres clickhouse; do
         rm -f "$marker"
     fi
 done
+# A manually started supervisor must be stopped before removing its files or data.
+verified_stopped=0
+if [ "$dry_run" = 0 ] && [ -f "$data_dir/supervisor.lock" ]; then
+    [ -x "$install_dir/tallyd" ] || fail 'Cannot verify whether Tally is stopped. Reinstall its application binary before database cleanup.'
+    "$install_dir/tallyd" check-stopped "$data_dir" || fail 'Tally is still running. Stop its manual session with Ctrl+C, then retry uninstall.'
+    verified_stopped=1
+fi
 if [ "$remove_databases" = 1 ]; then
+    if [ -f "$runtime_dir/.tally-runtime" ]; then
+        log "Remove downloaded private database runtimes: $runtime_dir"
+        [ "$dry_run" = 1 ] || rm -rf -- "$runtime_dir"
+    fi
     deb_packages=(); rpm_packages=()
     if [ -f "$package_receipt" ]; then
         while IFS='|' read -r manager db package; do
@@ -230,10 +252,13 @@ fi
 if [ "$dry_run" = 1 ]; then log 'Dry run complete; no changes made.'; exit 0; fi
 if [ "$os" = linux ] && [ "$units_removed" = 1 ]; then systemctl --user daemon-reload; fi
 # Remove only known application files, preserving anything an operator added.
-for helper in runtime-common.sh data-services.sh ensure-tally-tls.sh check-tls-host.sh upgrade-tally-to-gate.sh tally-source-db.py import-tally-users-to-gate.sql import-tally-registry-to-gate.sql validate-gate-registration.py; do
+for helper in runtime-common.sh data-services.sh ensure-tally-tls.sh check-tls-host.sh download-databases.sh database-assets.tsv upgrade-tally-to-gate.sh tally-source-db.py import-tally-users-to-gate.sql import-tally-registry-to-gate.sql validate-gate-registration.py; do
     rm -f "$install_dir/scripts/$helper"
 done
 rm -f "$install_dir/tallyd" "$install_dir/tallyd.new" "$install_dir/tally.sh" "$install_dir/postgres.sh" "$install_dir/clickhouse.sh" "$install_dir/uninstall.sh"
 rmdir "$install_dir/scripts" "$install_dir" 2>/dev/null || true
+# A clean uninstall has removed the launcher and verified that no children remain.
+# Retaining this empty lock would require a now-removed binary on a later cleanup.
+[ "$verified_stopped" = 0 ] || rm -f "$data_dir/supervisor.lock"
 if [ "$remove_databases" = 1 ]; then log 'Tally uninstalled and managed database cleanup completed. Configuration and certificates were retained.'
 else log 'Tally uninstalled. Rerun the installer to reuse the retained configuration and databases.'; fi

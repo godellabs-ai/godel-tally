@@ -24,8 +24,8 @@ for db in postgres clickhouse; do
         existing) [ "$action" != reset ] || fail 'Reset is supported only for managed containers'; continue ;;
         native)
             [ "$action" != reset ] || fail 'Reset is supported only for managed containers'
-            [ "$action" != up ] || start_service "$db"
-            # Native databases belong to persistent user services; dev cleanup never stops them.
+            # The installed tallyd supervisor exclusively owns private database processes.
+            # Starting/stopping the Tally service controls them as one unit.
             continue ;;
         docker) engine=docker; command -v docker >/dev/null || fail 'Install Docker or select native/existing databases' ;;
         apple)

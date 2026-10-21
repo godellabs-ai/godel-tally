@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1] - 2026-10-21
+
+- Keep fresh installations under `~/.godel-tally`, including configuration, scripts, application and database binaries, persistent data, logs, and certificates. Set `TALLY_HOME` to choose another root.
+- Download pinned PostgreSQL and ClickHouse runtimes concurrently, verify SHA-256 checksums, and reuse cached runtimes. Default setup no longer needs Homebrew, apt/yum, Python, or sudo.
+- Start private databases before Tally, wait for authenticated readiness, and stop the application and databases together. Detect crashed or unresponsive databases and let the user service restart the stack.
+- Keep private databases stopped with `--no-start` and `--no-service`; support manual startup and Ctrl+C shutdown.
+- Show seven colored setup stages with plain-language errors and recovery instructions; respect `NO_COLOR` and plain captured output.
+- Preserve settings and data on reinstall, migrate owned legacy database service definitions, and refuse unsupported PostgreSQL major-version upgrades before changing the application.
+- Retain downloaded runtimes on normal uninstall; remove owned runtimes and database data only with `--remove-databases`.
+
+Private PostgreSQL downloads require macOS 15+ or Linux with glibc 2.36+ (for example Debian 12 or Ubuntu 24.04). Docker, Apple containers, and existing database modes remain available.
+
 ## [0.1.0] - 2026-10-21
 
 Initial public release of Gödel Tally, the open-source AI discovery, inventory, and governance application.
@@ -18,3 +30,5 @@ Initial public release of Gödel Tally, the open-source AI discovery, inventory,
 Tally is alpha software. APIs, schemas, and operational behavior may change before 1.0.
 
 [0.1.0]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.0
+
+[0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1

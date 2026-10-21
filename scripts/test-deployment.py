@@ -20,9 +20,15 @@ name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 root = pathlib.Path(os.environ['FIXTURE'])
 with (root/'commands').open('a') as f: f.write(json.dumps([name, *args])+'\\n')
+if name == os.environ.get('FAIL_COMMAND'): sys.exit(23)
+if name == 'curl' and os.environ.get('FAIL_HTTP_READY') and any('/health/ready' in a for a in args): sys.exit(7)
+if name == 'brew' and args[0] == 'install' and os.environ.get('TEST_BREW_PROMPT'):
+    if os.environ.get('HOMEBREW_NO_ASK') != '1' or os.environ.get('HOMEBREW_ASK'):
+        print('Invalid input. Please press y or n.', file=sys.stderr); sys.exit(2)
 if name == 'uname': print(os.environ.get('TEST_OS','Linux') if '-s' in args else os.environ.get('TEST_ARCH','x86_64'))
 elif name == 'id': print('1000' if '-u' in args else 'operator')
-elif name == 'sw_vers': print('26.0')
+elif name == 'sw_vers': print(os.environ.get('TEST_MACOS','26.0'))
+elif name == 'getconf': print(os.environ.get('TEST_LIBC','glibc 2.36'))
 elif name == 'curl' and os.environ.get('BOOTSTRAP_SOURCE'):
     import shutil
     source=pathlib.Path(os.environ['BOOTSTRAP_SOURCE'])
@@ -31,6 +37,19 @@ elif name == 'curl' and os.environ.get('BOOTSTRAP_SOURCE'):
         print(os.environ.get('TEST_RELEASE_URL',url.removesuffix('/latest')+'/tag/v0.1.0'),end='')
     else:
         shutil.copyfile(source/url.rsplit('/',1)[1],args[args.index('-o')+1])
+elif name == 'curl' and any('/fixture-' in a for a in args):
+    import shutil, time
+    url=next(a for a in args if a.startswith('https://'))
+    asset=url.rsplit('/',1)[1]
+    if os.environ.get('TEST_PARALLEL'):
+        (root/('started-'+asset)).touch()
+        deadline=time.monotonic()+5
+        while len(list(root.glob('started-*'))) < 2:
+            if time.monotonic()>deadline: sys.exit('Downloads did not overlap')
+            time.sleep(.02)
+    shutil.copyfile(root/'assets'/asset,args[args.index('-o')+1])
+    if os.environ.get('CORRUPT_DATABASE') == asset.split('-')[1]:
+        pathlib.Path(args[args.index('-o')+1]).write_text('corrupt')
 elif name == 'pg_config': print(root/'bin')
 elif name == 'brew' and args[0] == '--prefix': print(root/'brew')
 elif name in ['brew','dpkg-query','rpm','sudo'] and os.environ.get('TEST_PACKAGES'):
@@ -57,7 +76,8 @@ elif name == 'initdb':
 elif name == 'postgres' and '--version' in args: print(os.environ.get('TEST_PG_BANNER','postgres (PostgreSQL) 18.6'))
 elif name == 'psql': print('1')
 elif name == 'openssl':
-    if args[:2] == ['x509','-help']: print('-checkhost -checkip')
+    if args[:2] == ['req','-help']: print('' if os.environ.get('TEST_OLD_OPENSSL') else '-addext')
+    elif args[:2] == ['x509','-help']: print('-checkhost -checkip')
     elif args[0] == 'rand': print('a'*int(args[-1])*2)
     elif args[0] == 'dgst': print('SHA2-256(stdin)= '+'b'*64)
     elif args[0] == 'req':
@@ -95,18 +115,33 @@ class Deployment(unittest.TestCase):
         self.bin = self.root/'bin'; self.bin.mkdir()
         for name in ['uname','id','sw_vers','docker','container','systemctl','launchctl','sudo',
                      'apt-get','yum','dnf','brew','pg_config','initdb','postgres','pg_isready',
-                     'psql','createdb','clickhouse','curl','sleep','openssl','dpkg-query','rpm','dpkg']:
+                     'psql','createdb','clickhouse','curl','sleep','openssl','dpkg-query','rpm','dpkg','getconf']:
             path = self.bin/name; path.write_text(STUB); path.chmod(0o755)
         self.home = self.root/'home with spaces'; self.home.mkdir()
         self.bundle = self.root/'bundle'; self.bundle.mkdir()
         shutil.copytree(ROOT/'scripts', self.bundle/'scripts')
         shutil.copy(ROOT/'uninstall.sh', self.bundle/'uninstall.sh')
+        shutil.copy(ROOT/'install.sh', self.bundle/'install.sh')
         (self.bundle/'tallyd').write_text('#!/bin/bash\n[ "$1" = --check-ui ]\n')
         (self.bundle/'tallyd').chmod(0o755)
         for path in [self.root/'brew/bin', self.root/'brew/postgresql@18/bin']:
             path.mkdir(parents=True, exist_ok=True)
         for name in ['initdb','postgres','pg_isready','psql','createdb','clickhouse']:
             (self.root/'brew/bin'/name).symlink_to(self.bin/name)
+        assets=self.root/'assets';assets.mkdir()
+        manifest=[]
+        for platform in ['linux-amd64','linux-arm64','darwin-amd64','darwin-arm64']:
+            for db,version in [('postgres','18.6.1'),('clickhouse','26.9.23.15')]:
+                archive_root='postgres-runtime' if db=='postgres' else f'clickhouse-common-static-{version}/usr/bin'
+                archive=assets/f'fixture-{db}-{platform}.tar.gz'
+                with tarfile.open(archive,'w:gz') as package:
+                    for binary in (['postgres','initdb','pg_isready','psql','createdb'] if db=='postgres' else ['clickhouse']):
+                        entry=f'{archive_root}/bin/{binary}' if db=='postgres' else f'{archive_root}/{binary}'
+                        package.add(self.bin/binary,arcname=entry)
+                digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+                repo='theseus-rs/postgresql-binaries' if db=='postgres' else 'ClickHouse/ClickHouse'
+                manifest.append(f'{db}|{platform}|{version}|tar|{archive_root}|{digest}|https://github.com/{repo}/releases/download/test/{archive.name}')
+        (self.bundle/'scripts/database-assets.tsv').write_text('\n'.join(manifest)+'\n')
         self.env = {k: v for k,v in os.environ.items() if not k.startswith(('TALLY_','TALLY_UPGRADE_','XDG_'))}
         (self.root/"empty.env").touch()
         (self.root/"os-release").write_text("ID=ubuntu\nVERSION_ID=22.04\nVERSION_CODENAME=jammy\n")
@@ -114,8 +149,7 @@ class Deployment(unittest.TestCase):
                         TALLY_DATA_DIR=str(self.root/'data with spaces'),
                         TALLY_CONFIG_DIR=str(self.root/'config with spaces'),
                         TALLY_INSTALL_DIR=str(self.root/'install with spaces'),
-                        TALLY_POSTGRES_URL='postgres://external/tally',
-                        TALLY_CLICKHOUSE_URL='https://external.example:8443?user=custom&password=encoded%26secret')
+                        TALLY_RUNTIME_DIR=str(self.root/'runtime with spaces'))
     def tearDown(self): self.temp.cleanup()
     def run_script(self, script, *args, ok=True):
         result = subprocess.run(['bash',str(script),*map(str,args)], env=self.env, text=True, capture_output=True)
@@ -125,7 +159,128 @@ class Deployment(unittest.TestCase):
     def commands(self):
         import json
         return [json.loads(line) for line in (self.root/'commands').read_text().splitlines()]
-    def install(self,*args): return self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,*args)
+    def install(self,*args,ok=True):
+        if 'existing' in args:
+            self.env.setdefault('TALLY_POSTGRES_URL','postgres://external/tally')
+            self.env.setdefault('TALLY_CLICKHOUSE_URL','https://external.example:8443?user=custom&password=encoded%26secret')
+        return self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,*args,ok=ok)
+    def check_single_root(self, custom=False):
+        for key in ['TALLY_INSTALL_DIR','TALLY_CONFIG_DIR','TALLY_DATA_DIR','TALLY_RUNTIME_DIR']:
+            self.env.pop(key,None)
+        root=self.root/'custom tally home' if custom else self.home/'.godel-tally'
+        if custom:
+            self.env['TALLY_HOME']=str(root)
+            legacy=self.home/'.config/godel-tally';legacy.mkdir(parents=True)
+            (legacy/'tally.env').write_text('not a configuration: must not be read\n')
+        self.install('--no-service')
+        settings=dict(line.split('=',1) for line in (root/'config/tally.env').read_text().splitlines())
+        self.assertEqual(settings['TALLY_HOME'],str(root))
+        for key in ['TALLY_INSTALL_DIR','TALLY_CONFIG_DIR','TALLY_DATA_DIR','TALLY_RUNTIME_DIR',
+                    'TALLY_TLS_DIR','TALLY_MAINTENANCE_DIR','TALLY_UPGRADE_STATE_DIR','TALLY_PG_BIN','TALLY_CLICKHOUSE_BIN']:
+            self.assertTrue(Path(settings[key]).is_relative_to(root),(key,settings[key]))
+        self.assertTrue((root/'app/tallyd').is_file())
+        self.assertTrue((root/'app/scripts/runtime-common.sh').is_file())
+        self.assertTrue((root/'data/postgres/PG_VERSION').is_file())
+        self.assertTrue((root/'data/clickhouse').is_dir())
+        self.assertFalse((self.home/'.local/share/godel-tally').exists())
+        self.run_script(ROOT/'uninstall.sh')
+        self.assertFalse((root/'app/tallyd').exists())
+        self.assertTrue((root/'data/postgres/PG_VERSION').exists())
+    def test_fresh_install_uses_one_home_directory(self):
+        self.check_single_root()
+    def test_custom_home_is_not_overridden_by_legacy_settings(self):
+        self.check_single_root(custom=True)
+
+    def test_native_downloads_overlap_and_do_not_use_package_managers(self):
+        self.env.update(TEST_OS='Darwin',TEST_PARALLEL='1')
+        self.install('--no-start')
+        self.assertEqual(len(list(self.root.glob('started-*'))),2)
+        self.assertFalse(any(c[0] in ['brew','sudo','apt-get','yum','dnf'] for c in self.commands()))
+        self.assertFalse((Path(self.env['TALLY_CONFIG_DIR'])/'installed-packages').exists())
+    def test_checksum_failure_explains_recovery_and_preserves_retry_state(self):
+        self.env.update(CORRUPT_DATABASE='postgres')
+        result=self.install('--no-start',ok=False)
+        self.assertIn('Where: Step 5 of 7: Prepare your private databases',result.stderr)
+        self.assertIn('postgres download checksum mismatch',result.stderr)
+        self.assertIn('Saved settings:',result.stderr)
+        self.assertNotIn('Tally is ready!',result.stdout)
+        self.assertFalse(any(c[0]=='initdb' for c in self.commands()))
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'; original=config.read_bytes()
+        self.env.pop('CORRUPT_DATABASE')
+        self.install('--no-start')
+        self.assertTrue(config.read_bytes().startswith(original))
+        self.assertFalse(list(Path(self.env['TALLY_RUNTIME_DIR']).glob('.download-*')))
+    def test_old_openssl_fails_before_install(self):
+        self.env.update(TEST_OLD_OPENSSL='1')
+        result=self.install(ok=False)
+        self.assertIn('OpenSSL cannot create',result.stderr)
+        self.assertIn('What to do next:',result.stderr)
+        self.assertFalse(Path(self.env['TALLY_INSTALL_DIR']).exists())
+        self.assertFalse(any(c[0]=='curl' for c in self.commands()))
+    def test_supplied_certificates_do_not_require_openssl_generation_support(self):
+        self.env.update(TEST_OLD_OPENSSL='1',TALLY_TLS_CERT_FILE=str(self.root/'provided.crt'),
+                        TALLY_TLS_KEY_FILE=str(self.root/'provided.key'))
+        Path(self.env['TALLY_TLS_CERT_FILE']).write_text('fixture cert')
+        Path(self.env['TALLY_TLS_KEY_FILE']).write_text('fixture key')
+        self.install('--db','existing','--no-start')
+        self.assertFalse(any(c[:2]==['openssl','req'] and '-x509' in c for c in self.commands()))
+    def test_download_failure_has_actionable_summary(self):
+        self.env['FAIL_COMMAND']='curl'
+        result=self.run_script(ROOT/'install.sh',ok=False)
+        self.assertIn('Where: Step 2 of 7: Download Tally',result.stderr)
+        self.assertIn('exit code 23',result.stderr)
+        self.assertIn('internet connection',result.stderr)
+        self.assertNotIn('Tally is ready!',result.stdout)
+    def test_no_start_and_no_service_do_not_claim_readiness(self):
+        for option in ['--no-start','--no-service']:
+            result=self.install('--db','existing',option)
+            self.assertIn('Startup was skipped',result.stdout)
+            self.assertIn('After it starts, open:',result.stdout)
+            self.assertNotIn('Tally is ready!',result.stdout)
+            self.assertNotIn('\x1b[',result.stdout+result.stderr)
+        self.assertFalse(any(c[0]=='curl' and any('/health/ready' in a for a in c) for c in self.commands()))
+    def test_ready_and_failed_health_checks_have_distinct_outcomes(self):
+        result=self.install('--db','existing')
+        self.assertIn('Tally is ready!',result.stdout)
+        self.env.update(FAIL_HTTP_READY='1',TEST_OS='Darwin')
+        result=self.install('--db','existing',ok=False)
+        self.assertNotIn('Tally is ready!',result.stdout)
+        self.assertIn('browser console did not become ready',result.stderr)
+        self.assertIn('Where: Step 7 of 7',result.stderr)
+        self.assertIn('tail -n 50',result.stderr)
+        self.assertIn('/server.log',result.stderr)
+        self.assertNotIn('journalctl',result.stderr)
+    def test_dry_run_does_not_download_or_install(self):
+        result=self.run_script(ROOT/'install.sh','--db','docker','--postgres','existing','--no-service','--dry-run')
+        self.assertIn('PostgreSQL (settings): existing',result.stdout)
+        self.assertIn('ClickHouse (activity): docker',result.stdout)
+        self.assertIn('Startup: Manual startup',result.stdout)
+        self.assertIn('Nothing was downloaded',result.stdout)
+        self.assertTrue(all(c[0]=='uname' for c in self.commands()))
+        self.assertFalse(Path(self.env['TALLY_INSTALL_DIR']).exists())
+    def test_terminal_colors_and_no_color(self):
+        import pty
+        master,slave=pty.openpty()
+        try:
+            for disabled in [False,True]:
+                env=dict(self.env,TERM='xterm-256color')
+                env.pop('NO_COLOR',None)
+                if disabled: env['NO_COLOR']='1'
+                result=subprocess.run(['bash',str(ROOT/'install.sh'),'--dry-run'],env=env,
+                                      stdout=slave,stderr=slave,timeout=10)
+                self.assertEqual(result.returncode,0)
+                output=os.read(master,16384)
+                self.assertEqual(b'\x1b[' in output,not disabled)
+                self.assertIn(b'Preview only',output)
+        finally:
+            os.close(master);os.close(slave)
+    def test_bootstrap_runs_from_stdin_or_bash_c(self):
+        source=(ROOT/'install.sh').read_text()
+        for command,input_text in [(['bash','-s','--','--dry-run'],source),
+                                   (['bash','-c',source,'bash','--dry-run'],None)]:
+            result=subprocess.run(command,input=input_text,env=self.env,text=True,capture_output=True,timeout=10)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('Preview only',result.stdout)
     def test_existing_databases_and_reinstall_preserve_credentials(self):
         self.install('--db','existing','--no-service')
         config = Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'
@@ -149,26 +304,37 @@ class Deployment(unittest.TestCase):
         self.assertTrue(agent['KeepAlive'])
         self.assertFalse(any(c[:2] == ['systemctl','enable'] for c in self.commands()))
     def test_native_private_instances_are_idempotent(self):
-        self.env.pop('TALLY_POSTGRES_URL');self.env.pop('TALLY_CLICKHOUSE_URL')
         self.install('--no-start')
+        config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env';saved=config.read_bytes()
+        self.env['FAIL_COMMAND']='curl'  # A cached reinstall must work offline.
         self.install('--no-start')
         commands=self.commands()
         self.assertEqual(sum(c[0]=='initdb' for c in commands),1)
-        self.assertEqual(sum(c[0]=='curl' and 'CREATE DATABASE IF NOT EXISTS `tally`' in c for c in commands),2)
-        self.assertFalse(list(Path(self.env['TALLY_DATA_DIR']).glob('.clickhouse-headers.*')))
-        self.assertTrue(any(c[:4]==['sudo','apt-get','install','-y'] for c in commands))
+        self.assertEqual(sum(c[0]=='curl' for c in commands),2)
+        self.assertFalse(any(c[0] in ['sudo','brew','pg_isready','createdb'] for c in commands))
+        self.assertFalse(any(c[0]=='postgres' and '--version' not in c for c in commands))
         self.assertTrue((Path(self.env['TALLY_CONFIG_DIR'])/'clickhouse.xml').is_file())
-        self.assertTrue((self.home/'.config/systemd/user/tally-postgres.service').is_file())
-        self.assertTrue((self.home/'.config/systemd/user/tally-clickhouse.service').is_file())
-    def test_homebrew_postgres_version_with_packager_suffix(self):
-        self.env.update(TEST_OS='Darwin',TEST_PG_BANNER='postgres (PostgreSQL) 18.6 (Homebrew)')
-        result=self.install('--no-start')
-        self.assertIn('Using postgres (PostgreSQL) 18.6 (Homebrew)',result.stdout)
-        self.assertIn('Preparing the private PostgreSQL database',result.stdout)
-        self.assertNotIn('embedded UI is available',result.stdout)
-        self.assertTrue((self.home/'Library/LaunchAgents/ai.godel.tally.postgres.plist').is_file())
-        wrapper=(Path(self.env['TALLY_INSTALL_DIR'])/'postgres.sh').read_text()
-        self.assertIn('export LC_ALL=en_US.UTF-8\n',wrapper)
+        self.assertFalse((self.home/'.config/systemd/user/tally-postgres.service').exists())
+        self.assertFalse((self.home/'.config/systemd/user/tally-clickhouse.service').exists())
+        self.assertEqual(config.read_bytes(),saved)
+        self.assertIn('supervise', (Path(self.env['TALLY_INSTALL_DIR'])/'tally.sh').read_text())
+    def test_native_manual_install_needs_no_user_service_manager(self):
+        self.env['FAIL_COMMAND']='systemctl'
+        self.install('--no-service')
+        self.assertFalse(any(c[0] in ['systemctl','launchctl'] for c in self.commands()))
+        self.assertFalse((self.home/'.config/systemd/user').exists())
+    def test_private_runtime_platform_requirements(self):
+        for settings,message in [({'TEST_LIBC':'glibc 2.35'},'glibc 2.36+'),({'TEST_OS':'Darwin','TEST_MACOS':'14.6'},'macOS 15+')]:
+            self.env.update(settings)
+            result=self.install('--no-start',ok=False)
+            self.assertIn(message,result.stderr)
+        self.assertFalse(any(c[0]=='curl' for c in self.commands()))
+    def test_older_data_is_refused_before_application_changes(self):
+        pg=Path(self.env['TALLY_DATA_DIR'])/'postgres';pg.mkdir(parents=True)
+        (pg/'PG_VERSION').write_text('17')
+        result=self.install('--no-start',ok=False)
+        self.assertIn('major-version migration',result.stderr)
+        self.assertFalse(Path(self.env['TALLY_INSTALL_DIR']).exists())
     def test_postgres_version_parser_accepts_package_labels_and_rejects_unknown_banners(self):
         for banner,expected in [('postgres (PostgreSQL) 18.6 (Homebrew)','18'),
                                 ('postgres (PostgreSQL) 15.10 (Ubuntu 15.10-1.pgdg24.04+1)','15'),
@@ -177,11 +343,11 @@ class Deployment(unittest.TestCase):
             self.assertEqual(result.stdout.strip(),expected)
         self.env.update(TEST_PG_BANNER='postgres (PostgreSQL) 14.18 (Homebrew)')
         result=self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,'--no-start',ok=False)
-        self.assertIn('requires PostgreSQL 15 or newer; found:',result.stderr)
+        self.assertIn('must be version 18',result.stderr)
         self.assertFalse(any(c[0]=='initdb' for c in self.commands()))
         self.env['TEST_PG_BANNER']='unexpected banner 18.6'
         result=self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,'--no-start',ok=False)
-        self.assertIn('Cannot read the PostgreSQL version',result.stderr)
+        self.assertIn('must be version 18',result.stderr)
     def test_uninstall_retains_data_config_and_unknown_files(self):
         self.install('--db','existing','--no-start')
         config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env'; saved=config.read_bytes()
@@ -197,6 +363,19 @@ class Deployment(unittest.TestCase):
         self.assertEqual(custom.read_text(),'keep me too')
         self.run_script(ROOT/'uninstall.sh')
         self.assertFalse(any(c[0] in ['brew','sudo','docker','container'] for c in self.commands()))
+    def test_database_cleanup_after_normal_supervised_uninstall(self):
+        self.install('--no-service')
+        data=Path(self.env['TALLY_DATA_DIR']);(data/'supervisor.lock').touch()
+        binary=Path(self.env['TALLY_INSTALL_DIR'])/'tallyd'
+        binary.write_text('#!/bin/bash\n[ "$1" = check-stopped ]\n')
+        self.run_script(ROOT/'uninstall.sh')
+        self.assertFalse(binary.exists())
+        self.assertFalse((data/'supervisor.lock').exists())
+        self.assertTrue((data/'postgres/PG_VERSION').exists())
+        self.run_script(ROOT/'uninstall.sh','--remove-databases')
+        self.assertFalse((data/'postgres').exists())
+        self.assertFalse(Path(self.env['TALLY_RUNTIME_DIR']).exists())
+
     def test_uninstall_partial_install_without_registered_services(self):
         # v0.1.0 persisted configuration and copied the binary before the version check.
         self.env.update(TEST_OS='Darwin',TEST_PG_BANNER='unknown version')
@@ -248,7 +427,7 @@ class Deployment(unittest.TestCase):
         self.run_script(ROOT/'uninstall.sh')
         commands=self.commands()[len(before):]
         self.assertEqual([c[2] for c in commands if c[:2]==['launchctl','bootout']],
-                         ['gui/1000/ai.godel.tally.'+name for name in ['server','postgres','clickhouse']])
+                         ['gui/1000/ai.godel.tally.'+name for name in ['server']])
         self.assertFalse(any(c[0]=='brew' for c in commands))
         self.assertFalse(list((self.home/'Library/LaunchAgents').glob('ai.godel.tally.*.plist')))
         self.assertEqual(config.read_bytes(),saved)
@@ -297,18 +476,46 @@ class Deployment(unittest.TestCase):
         (self.root/'containers/godel-tally-dev-postgres').unlink()
         self.env['FAIL_READY']='1'
         self.run_script(ROOT/'scripts/data-services.sh','up',ok=False)
-    def test_brew_and_yum_native_packages(self):
-        for platform in ['Darwin', 'Linux']:
-            self.env.update(TEST_OS=platform, TALLY_DATA_DIR=str(self.root/platform/'data'),
-                TALLY_CONFIG_DIR=str(self.root/platform/'config'), TALLY_INSTALL_DIR=str(self.root/platform/'install'))
-            self.env.pop('TALLY_POSTGRES_URL',None);self.env.pop('TALLY_CLICKHOUSE_URL',None)
-            if platform == 'Linux':
-                (self.bin/'apt-get').unlink();(self.bin/'dnf').unlink()
-                (self.root/'os-release').write_text('ID=rocky\nVERSION_ID=9.0\n')
+    def test_download_platforms_do_not_install_packages(self):
+        for platform,arch in [('Darwin','x86_64'),('Darwin','arm64'),('Linux','x86_64'),('Linux','aarch64')]:
+            target=self.root/(platform+arch)
+            self.env.update(TEST_OS=platform,TEST_ARCH=arch,TALLY_DATA_DIR=str(target/'data'),
+                TALLY_CONFIG_DIR=str(target/'config'),TALLY_INSTALL_DIR=str(self.root/'install with spaces'),TALLY_RUNTIME_DIR=str(target/'runtime'))
             self.install('--no-start')
+        self.assertFalse(any(c[0] in ['brew','sudo','apt-get','dnf','yum'] for c in self.commands()))
+    def test_legacy_database_units_are_retired_after_preparation(self):
+        self.install('--no-start')
+        units=self.home/'.config/systemd/user'
+        for db in ['postgres','clickhouse']:
+            (units/f'tally-{db}.service').write_text(f'[Service]\nExecStart=/bin/bash "{self.env["TALLY_INSTALL_DIR"]}/{db}.sh"\n')
+        self.install('--no-start')
+        self.assertFalse((units/'tally-postgres.service').exists())
+        self.assertFalse((units/'tally-clickhouse.service').exists())
         commands=self.commands()
-        self.assertTrue(any(c[:4]==['brew','list','--formula','postgresql@18'] for c in commands))
-        self.assertTrue(any(c[:4]==['sudo','yum','install','-y'] for c in commands))
+        self.assertIn(['systemctl','--user','stop','tally-server.service'],commands)
+        for db in ['postgres','clickhouse']:
+            self.assertIn(['systemctl','--user','disable','--now',f'tally-{db}.service'],commands)
+    def test_macos_raw_clickhouse_asset(self):
+        self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64')
+        asset=self.root/'assets/fixture-clickhouse-darwin-arm64.tar.gz'
+        asset.write_text(STUB)
+        manifest=self.bundle/'scripts/database-assets.tsv'
+        rows=[]
+        for line in manifest.read_text().splitlines():
+            row=line.split('|')
+            if row[:2]==['clickhouse','darwin-arm64']:
+                row[3]='binary';row[4]='-';row[5]=hashlib.sha256(asset.read_bytes()).hexdigest()
+            rows.append('|'.join(row))
+        manifest.write_text('\n'.join(rows)+'\n')
+        self.install('--no-service')
+        binary=Path(self.env['TALLY_RUNTIME_DIR'])/'clickhouse-26.9.23.15-darwin-arm64/bin/clickhouse'
+        self.assertEqual(binary.read_text(),STUB)
+        self.assertTrue(os.access(binary,os.X_OK))
+    def test_native_rejects_external_url_override(self):
+        self.env['TALLY_POSTGRES_URL']='postgres://external/tally'
+        result=self.install('--no-start',ok=False)
+        self.assertIn('choose --postgres existing',result.stderr)
+        self.assertFalse(any(c[0]=='curl' for c in self.commands()))
     def test_live_reload_uses_one_rust_watcher_and_no_router(self):
         shutil.copy(ROOT/'dev-run.sh', self.bundle/'dev-run.sh')
         (self.bundle/'apps/web/node_modules').mkdir(parents=True)
@@ -326,7 +533,7 @@ printf 'npm %s\\n' "$*" >> "$FIXTURE/dev-events"
 trap 'exit 0' TERM INT
 while true; do /bin/sleep 1; done
 ''');npm.chmod(0o755)
-        self.env.update(TALLY_DB_MODE='existing', TALLY_KEEP_DB='1')
+        self.env.update(TALLY_DB_MODE='existing', TALLY_KEEP_DB='1', TALLY_POSTGRES_URL='postgres://external/tally', TALLY_CLICKHOUSE_URL='http://external:8123')
         with (self.root/'dev.log').open('w') as output:
             process=subprocess.Popen(['bash',str(self.bundle/'dev-run.sh')],cwd=self.bundle,
                 env=self.env,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
@@ -359,8 +566,8 @@ while true; do /bin/sleep 1; done
         sums=release/'SHA256SUMS';sums.write_text(f'{checksum}  {archive.name}\n')
         self.env['BOOTSTRAP_SOURCE']=str(release)
         result=self.run_script(ROOT/'install.sh','--db','existing')
-        stages=['installing for linux/amd64','finding the latest release','downloading v0.1.0',
-                'downloading and verifying','checksum verified','preparing the application']
+        stages=['[1/7] Check your computer','[2/7] Download Tally','Finding the latest release',
+                'Downloading v0.1.0','[3/7] Verify the download','Download verified and unpacked']
         offsets=[result.stdout.index(stage) for stage in stages]
         self.assertEqual(offsets,sorted(offsets))
         self.assertTrue((self.root/'installed').exists())
@@ -416,7 +623,10 @@ while true; do /bin/sleep 1; done
         with tarfile.open(archive) as package:
             self.assertEqual(package.extractfile('tallyd').read(),binary.read_bytes())
             self.assertEqual(package.extractfile('uninstall.sh').read(),(ROOT/'uninstall.sh').read_bytes())
+            self.assertEqual(package.extractfile('install.sh').read(),(ROOT/'install.sh').read_bytes())
             self.assertIn('scripts/install-runtime.sh',package.getnames())
+            self.assertIn('scripts/database-assets.tsv',package.getnames())
+            self.assertIn('scripts/download-databases.sh',package.getnames())
             self.assertFalse(any(name.endswith('.env') for name in package.getnames()))
             self.assertFalse(any(part.startswith('._') for name in package.getnames()
                                  for part in Path(name).parts))
@@ -451,7 +661,8 @@ while true; do /bin/sleep 1; done
         self.install('--no-start')
         config=Path(self.env['TALLY_CONFIG_DIR']);data=Path(self.env['TALLY_DATA_DIR'])
         receipt=config/'installed-packages'
-        self.assertEqual(receipt.read_text(),'brew-formula|postgres|postgresql@18\n')
+        receipt.write_text('brew-formula|postgres|postgresql@18\n')  # A retained legacy receipt.
+        (packages/'postgresql@18').touch()
         self.install('--no-start')
         self.assertEqual(len(receipt.read_text().splitlines()),1)
         (data/'backup.sql').write_text('keep')
@@ -466,15 +677,14 @@ while true; do /bin/sleep 1; done
         self.assertTrue((data/'backup.sql').exists());self.assertTrue((data/'tls/tally.key').exists())
         self.assertTrue((config/'tally.env').exists())
         self.run_script(ROOT/'uninstall.sh','--remove-databases')
-    def test_failed_package_install_keeps_receipt_for_cleanup(self):
-        self.env.update(TEST_OS='Darwin',TEST_PACKAGES='1',FAIL_PACKAGE_INSTALL='1')
-        self.run_script(self.bundle/'scripts/install-runtime.sh',self.bundle,'--no-start',ok=False)
-        config=Path(self.env['TALLY_CONFIG_DIR'])
-        self.assertEqual((config/'installed-packages').read_text(),'brew-formula|postgres|postgresql@18\n')
-        self.env.pop('FAIL_PACKAGE_INSTALL')
-        self.run_script(ROOT/'uninstall.sh','--remove-databases')
-        self.assertFalse((self.root/'packages/postgresql@18').exists())
-        self.assertFalse((config/'installed-packages').exists())
+    def test_runtime_cleanup_refuses_another_installation(self):
+        self.install('--no-start')
+        marker=Path(self.env['TALLY_RUNTIME_DIR'])/'.tally-runtime'
+        marker.write_text('/another/config\n')
+        before=self.commands()
+        result=self.run_script(ROOT/'uninstall.sh','--remove-databases',ok=False)
+        self.assertIn('belongs to another installation',result.stderr)
+        self.assertFalse(any(c[0] in ['systemctl','launchctl'] for c in self.commands()[len(before):]))
     def test_legacy_native_cleanup_preserves_packages_without_receipts(self):
         self.env['TEST_OS']='Darwin'
         self.install('--no-start')
@@ -487,11 +697,15 @@ while true; do /bin/sleep 1; done
     def test_remove_deb_and_rpm_packages_without_cascading_removal(self):
         for manager in ['apt','yum']:
             self.env.update(TEST_PACKAGES='1',TALLY_CONFIG_DIR=str(self.root/manager/'config'),
-                TALLY_INSTALL_DIR=str(self.root/manager/'install'),TALLY_DATA_DIR=str(self.root/manager/'data'))
+                TALLY_INSTALL_DIR=str(self.root/manager/'install'),TALLY_DATA_DIR=str(self.root/manager/'data'),TALLY_RUNTIME_DIR=str(self.root/manager/'runtime'))
             if manager=='yum':
                 (self.bin/'apt-get').unlink();(self.bin/'dnf').unlink()
                 (self.root/'os-release').write_text('ID=rocky\nVERSION_ID=9.0\n')
             self.install('--no-start')
+            packages=['postgresql-18','postgresql-client-18'] if manager=='apt' else ['postgresql18-server','postgresql18']
+            state=self.root/'packages';state.mkdir(exist_ok=True)
+            for package in packages: (state/package).touch()
+            (Path(self.env['TALLY_CONFIG_DIR'])/'installed-packages').write_text(''.join(f'{manager}|postgres|{package}\n' for package in packages))
             self.run_script(ROOT/'uninstall.sh','--remove-databases')
         commands=self.commands()
         self.assertIn(['sudo','dpkg','--remove','postgresql-18','postgresql-client-18'],commands)

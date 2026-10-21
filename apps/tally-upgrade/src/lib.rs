@@ -191,7 +191,7 @@ fn routes(app: App) -> Router {
         .route(
             "/health",
             get(|| async {
-                Json(json!({"status":"ready","service":"tally_upgrade","version":"0.1.0"}))
+                Json(json!({"status":"ready","service":"tally_upgrade","version":env!("CARGO_PKG_VERSION")}))
             }),
         )
         .route("/pair", post(pair))

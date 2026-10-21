@@ -51,13 +51,32 @@ curl -fsSL \
 ```
 
 The script downloads the matching binary from [GitHub Releases](https://github.com/godellabs-ai/godel-tally/releases/latest),
-verifies its checksum, installs PostgreSQL and ClickHouse, creates Tally's databases, and starts Tally
+verifies its checksum, downloads private PostgreSQL and ClickHouse runtimes in parallel, and starts Tally
 as a user service (`systemd --user` on Linux, a LaunchAgent on macOS). The web console is embedded in
 the binary; Docker, Node.js, and nginx are not required.
 
-Run as your normal user with Bash, curl, tar, and OpenSSL available. macOS needs
-[Homebrew](https://brew.sh); Linux needs sudo for native database packages and a working systemd user
-session. See the [installation guide](https://godel-labs.ai/docs/tally/installation) for supported package managers and service details.
+Run as your normal user with Bash, curl, tar, and OpenSSL available. The default private
+installation needs **macOS 15+** or **Linux with glibc 2.36+** (for example Debian 12 or
+Ubuntu 24.04), on amd64 or arm64. It uses no Homebrew, apt/yum, Python, or sudo. Linux
+needs a working systemd user session for automatic startup; `--no-service` supports
+manual startup. See the [installation guide](https://godel-labs.ai/docs/tally/installation).
+
+Fresh installations live under `~/.godel-tally`: `app/` holds Tally, `runtime/` holds
+versioned database binaries, `config/` holds settings and credentials, and `data/`
+holds persistent database data, logs, and certificates. Set `TALLY_HOME` before installing
+to choose another root. Legacy installations keep their saved paths and settings.
+OS service registration files and Linux journal entries use the operating system's standard locations.
+
+```text
+~/.godel-tally/
+├── app/       # Tally binary, launcher, scripts, and uninstaller
+├── config/    # Configuration, credentials, and ClickHouse settings
+├── runtime/   # Downloaded PostgreSQL and ClickHouse binaries
+└── data/      # Database data, logs, certificates, and upgrade state
+```
+Database downloads are pinned and verified against SHA-256 hashes shipped with Tally;
+reinstalling reuses complete cached runtimes. Database version changes require a new
+Tally release; the installer does not fetch an untested “latest” database version.
 
 Choose another HTTPS port with `--port`, for example `bash install-tally.sh --port 9443`.
 Reinstalling without this option keeps the saved port.
@@ -67,6 +86,23 @@ self-signed. To use Docker or Apple containers for the databases, run `bash inst
 or `bash install-tally.sh --db apple`. [Existing databases](https://godel-labs.ai/docs/tally/database-options#existing-databases)
 are supported too. For native Rust/Next.js development with live reload, follow the
 [development setup](https://godel-labs.ai/docs/tally/development).
+
+### Follow the setup progress
+
+The installer shows seven numbered steps: check your computer, download Tally, verify the
+download, prepare the application, prepare the databases, secure the browser connection, and
+finish setup. Blue marks progress, green marks success, yellow marks notes, and red marks a
+stopped installation. Each status also has a text label. Colors turn off when output is saved
+to a file, or when you set `NO_COLOR=1`.
+
+Wait for **Tally is ready!**, then open the browser address shown. With `--no-start` or
+`--no-service`, setup instead gives you a command to start Tally; it has not checked that the
+browser console is ready. Private databases are prepared but stay stopped. Docker and
+Apple-container provisioning may still start containers.
+
+If setup stops, read **Where**, **What happened**, and **What to do next** at the end of the
+output. Correct the reported problem and rerun the same command. Keep the saved settings file
+and data directory; reinstalling reuses them.
 
 **No connectors ready yet?** Click **Add evaluation data** on an empty Overview. Follow GPT-4o, Claude Sonnet 4,
 Gemini 2.5 Pro, Llama 3.3, and other real models through a realistic enterprise workspace spanning
@@ -97,12 +133,18 @@ On **macOS**:
 launchctl bootout "gui/$(id -u)/ai.godel.tally.server"
 # Start again after stopping
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.server.plist"
-# Restart a loaded service
-launchctl kickstart -k "gui/$(id -u)/ai.godel.tally.server"
+# Restart: run the Stop command, then the Start command above
 ```
 
-These commands control Tally; the databases keep running. See [service management](https://godel-labs.ai/docs/tally/operations)
-for logs, startup at login, and database services.
+These commands start and stop **Tally and its private databases together**. Tally waits
+for authenticated database readiness before starting its application. If a private database
+exits or fails repeated health checks, the supervisor stops the application and remaining
+database; the user service manager restarts the stack. A manual stop keeps it stopped.
+Container and existing database lifecycles stay separate.
+
+With `--no-service`, run `bash ~/.godel-tally/app/tally.sh` and stop with Ctrl+C.
+Private database logs are `~/.godel-tally/data/postgres.log` and `clickhouse.log`.
+See [service management](https://godel-labs.ai/docs/tally/operations) for details.
 
 ### Uninstall
 
@@ -115,9 +157,9 @@ curl -fsSL \
 
 The uninstaller removes Tally's application files and user services, and stops its private database
 services and owned database containers. It **keeps configuration, credentials, database data, container
-volumes, and PostgreSQL/ClickHouse packages** so you can reinstall without losing data. Existing database
+volumes, downloaded database runtimes, and legacy PostgreSQL/ClickHouse packages** so you can reinstall without losing data. Existing database
 servers are untouched. Run `bash uninstall-tally.sh --dry-run` to preview, or set `TALLY_CONFIG_DIR` for
-a custom installation. New installations also include `~/.local/lib/godel-tally/uninstall.sh`.
+a custom installation. New installations also include `~/.godel-tally/app/uninstall.sh`.
 
 To also remove managed PostgreSQL and ClickHouse **and permanently delete their data**:
 
@@ -126,11 +168,11 @@ bash uninstall-tally.sh --remove-databases --dry-run
 bash uninstall-tally.sh --remove-databases
 ```
 
-This removes private database data, owned containers, and packages/volumes recorded as created by
+This removes private database data and downloaded runtimes, owned containers, and legacy packages/volumes recorded as created by
 the installer. Pre-existing packages, existing database servers, and unrecorded volumes are kept.
 Older installs without ownership records retain their packages. Configuration, certificates, logs,
 and backups outside the database directories remain. Back up before using this option; Linux package
-removal may use sudo. See [uninstall details](https://godel-labs.ai/docs/tally/operations#remove-databases).
+removal for legacy package-based installations may use sudo. Private downloads never need sudo. See [uninstall details](https://godel-labs.ai/docs/tally/operations#remove-databases).
 
 ## Connect the sources you already have
 
@@ -188,7 +230,7 @@ make build       # Build tallyd with the production UI embedded
 make run         # Run locally; Docker databases by default
 ```
 
-Release binaries are available for Linux and macOS on amd64 and arm64. The installer supports native,
+Release binaries are available for Linux and macOS on amd64 and arm64. The installer supports private downloaded (`native`),
 Docker, Apple-container, or existing databases, independently for PostgreSQL and ClickHouse.
 See [installation and operations](https://godel-labs.ai/docs/tally/installation) for deployment details.
 

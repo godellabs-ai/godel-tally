@@ -19,6 +19,7 @@ axum-server = { version = "0.8", features = ["tls-rustls"] }
 tower = { workspace = true, features = ["util"] }
 tower-http.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+webpki = { package = "rustls-webpki", version = "0.103" }
 
 anyhow.workspace = true
 argon2.workspace = true

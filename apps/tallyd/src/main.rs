@@ -21,6 +21,7 @@ mod email;
 mod gate_rekey;
 mod host;
 mod runtime_control;
+mod supervisor;
 mod ui;
 
 #[tokio::main]
@@ -34,7 +35,7 @@ async fn main() -> Result<()> {
     }
     if args.first().is_some_and(|arg| arg == "--help") {
         println!(
-            "tallyd [--version | --check-ui | collector <command> | rekey-for-gate]\nRun Tally API, UI, connector worker and Gate upgrades. Configuration: TALLY_* environment variables."
+            "tallyd [--version | --check-ui | supervise | check-tls-host CERT HOST | collector <command> | rekey-for-gate]\nRun Tally API, UI, connector worker and Gate upgrades. Configuration: TALLY_* environment variables."
         );
         return Ok(());
     }
@@ -49,8 +50,24 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|arg| arg == "rekey-for-gate") {
         return gate_rekey::run().await;
     }
+    if args.first().is_some_and(|arg| arg == "check-tls-host") {
+        use rustls::pki_types::pem::PemObject;
+        anyhow::ensure!(args.len() == 3, "usage: tallyd check-tls-host CERT HOST");
+        let certificate = rustls::pki_types::CertificateDer::from_pem_file(&args[1])?;
+        let name = rustls::pki_types::ServerName::try_from(args[2].clone())?;
+        webpki::EndEntityCert::try_from(&certificate)?.verify_is_valid_for_subject_name(&name)?;
+        return Ok(());
+    }
+    if args.first().is_some_and(|arg| arg == "check-stopped") {
+        anyhow::ensure!(args.len() == 2, "usage: tallyd check-stopped DATA_DIR");
+        return supervisor::check_stopped(std::path::Path::new(&args[1]));
+    }
     if runtime_control::marker("retired").is_file() {
         return Ok(());
+    }
+    if args.first().is_some_and(|arg| arg == "supervise") {
+        anyhow::ensure!(args.len() == 1, "supervise takes no arguments");
+        return supervisor::run().await;
     }
     if args.first().is_some_and(|arg| arg == "collector") {
         return tally_collector::run_cli(

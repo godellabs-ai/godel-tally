@@ -59,7 +59,8 @@ if ! certificate_valid; then
     (umask 077; cat "$staging/tally.key" > "$tls_dir/tally.key"; cat "$staging/tally.crt" > "$tls_dir/tally.crt")
     chmod 600 "$tls_dir/tally.key"
     chmod 644 "$tls_dir/tally.crt"
-    echo "Created a self-signed Tally server certificate in .local/tls."
+    echo "Created Tally's local browser certificate in $tls_dir."
 fi
 
-echo "Tally is using local TLS. Accept the browser warning for self-signed certificates."
+echo "Your browser will show a certificate warning because this certificate was created on your computer."
+echo "Check that you opened your Tally address before accepting the warning."

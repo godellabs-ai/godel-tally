@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 sys.dont_write_bytecode = True
@@ -29,6 +30,21 @@ class SourceDatabase(unittest.TestCase):
         self.assertEqual(child['PGSSLMODE'], 'verify-full')
         self.assertEqual(child['PGSSLROOTCERT'], '/certs/ca.pem')
         self.assertNotIn('PGSERVICE', child)
+
+    def test_private_clients_take_precedence_over_system_clients(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            for name,operation in [('psql',['query','SELECT 1']),('pg_dump',['dump'])]:
+                client=Path(directory)/name
+                client.write_text('#!/bin/sh\nexit 0\n');client.chmod(0o755)
+                env=dict(TALLY_POSTGRES_MODE='native',TALLY_PG_BIN=directory,
+                         TALLY_POSTGRES_URL='postgres://tally:private-secret@127.0.0.1:5433/tally')
+                with patch.object(source.shutil,'which',return_value='/system/older/'+name) as system:
+                    argv,child=source.command(operation,env)
+                self.assertEqual(argv[0],str(client))
+                system.assert_not_called()
+                self.assertNotIn('private-secret',' '.join(argv))
+                self.assertEqual(child['PGPASSWORD'],'private-secret')
 
     def test_unsupported_connection_options_fail_before_any_database_command(self):
         with self.assertRaisesRegex(ValueError, 'Unsupported PostgreSQL'):

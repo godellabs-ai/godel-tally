@@ -25,13 +25,18 @@ def check_make_up():
         binary = root / "tallyd"
         binary.write_text('''#!/usr/bin/env bash
 [ "${1:-}" != --check-ui ] || exit 0
+if [ "${1:-}" = check-tls-host ]; then
+    unset TALLY_BINARY
+    exec bash "$TALLY_TLS_FIXTURE_HELPER" "$2" "$3"
+fi
 [ -r "$TALLY_TLS_CERT_FILE" ] && [ -r "$TALLY_TLS_KEY_FILE" ] || exit 74
 printf 'TLS fixture reached native binary.\\n' >&2
 exit 73
 ''')
         binary.chmod(0o755)
         env = {key: value for key, value in os.environ.items() if not key.startswith(("TALLY_", "TALLY_UPGRADE_"))}
-        env.update(TALLY_URL="https://localhost:8443", TALLY_BINARY=str(binary))
+        env.update(TALLY_URL="https://localhost:8443", TALLY_BINARY=str(binary),
+                   TALLY_TLS_FIXTURE_HELPER=str(root / "scripts/check-tls-host.sh"))
         env.pop("BASH_ENV", None)
         command = ["make", "--no-print-directory", "up"]
 
@@ -41,7 +46,7 @@ exit 73
             return result
 
         result = startup()
-        assert "Created a self-signed Tally" in result.stdout
+        assert f"Created Tally's local browser certificate in {root.resolve() / '.local/tls'}." in result.stdout, result.stdout
         cert = root / ".local/tls/tally.crt"
         key = root / ".local/tls/tally.key"
         original = (cert.read_bytes(), key.read_bytes())
@@ -88,7 +93,7 @@ exit 99
         cert = root / ".local/tls/tally.crt"
         key = root / ".local/tls/tally.key"
         result = ensure()
-        assert "self-signed" in result.stdout
+        assert "certificate was created on your computer" in result.stdout
         for host in ["localhost", "127.0.0.1", "::1"]:
             run("bash", str(root / "scripts/check-tls-host.sh"), str(cert), host)
         original = cert.read_bytes()

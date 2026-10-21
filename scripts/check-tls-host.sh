@@ -15,6 +15,11 @@ if grep -q -- '-checkhost' <<< "$help_text"; then
     exit $?
 fi
 
+# Installed Tally includes a certificate hostname verifier; no Python/Homebrew is needed.
+if [ -n "${TALLY_BINARY:-}" ] && [ -x "$TALLY_BINARY" ]; then
+    exec "$TALLY_BINARY" check-tls-host "$cert" "$host"
+fi
+
 # Apple's LibreSSL omits -checkhost/-checkip. Python's certificate decoder exposes
 # the parsed SANs, avoiding fragile parsing of `openssl x509 -text` output.
 command -v python3 >/dev/null || { echo "Python 3 is required to inspect TLS hostnames with LibreSSL" >&2; exit 2; }

@@ -39,7 +39,8 @@ def command(args, env):
         if key not in options:
             raise ValueError('Unsupported PostgreSQL connection option: ' + key)
         child[options[key]] = value
-    binary = shutil.which(client, path=env.get('PATH'))
+    private = Path(env['TALLY_PG_BIN']) / client if env.get('TALLY_PG_BIN') else None
+    binary = str(private) if private and private.is_file() and os.access(private, os.X_OK) else shutil.which(client, path=env.get('PATH'))
     if not binary:
         candidates = [Path(p)/client for p in (
             env.get('TALLY_PG_BIN', ''), '/opt/homebrew/opt/postgresql@18/bin',
