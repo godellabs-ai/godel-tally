@@ -159,7 +159,7 @@ else
     log "Keep database data and certificates in $data_dir"
     log 'Database packages and container volumes will be kept.'
 fi
-units_removed=0
+units_removed=0; server_booted_out=0
 for name in server postgres clickhouse; do
     unit="$(service_file "$name")"
     [ -e "$unit" ] || continue
@@ -167,7 +167,10 @@ for name in server postgres clickhouse; do
     [ "$dry_run" = 0 ] || continue
     if [ "$os" = darwin ]; then
         label="gui/$(id -u)/ai.godel.tally.$name"
-        if launchctl print "$label" >/dev/null 2>&1; then launchctl bootout "$label"; fi
+        if launchctl print "$label" >/dev/null 2>&1; then
+            launchctl bootout "$label"
+            [ "$name" != server ] || server_booted_out=1
+        fi
     else
         systemctl --user disable --now "tally-$name.service"
     fi
@@ -211,7 +214,18 @@ done
 verified_stopped=0
 if [ "$dry_run" = 0 ] && [ -f "$data_dir/supervisor.lock" ]; then
     [ -x "$install_dir/tallyd" ] || fail 'Cannot verify whether Tally is stopped. Reinstall its application binary before database cleanup.'
-    "$install_dir/tallyd" check-stopped "$data_dir" || fail 'Tally is still running. Stop its manual session with Ctrl+C, then retry uninstall.'
+    stop_hint='Stop its manual session with Ctrl+C'
+    if [ "$server_booted_out" = 1 ]; then
+        # launchctl bootout returns while the supervisor is still stopping its databases and
+        # holding its lock. Allow launchd's 90-second ExitTimeOut before reporting it as running.
+        for attempt in $(seq 1 95); do
+            if "$install_dir/tallyd" check-stopped "$data_dir" >/dev/null 2>&1; then break; fi
+            [ "$attempt" != 1 ] || log 'Waiting for the Tally service to finish stopping...'
+            sleep 1
+        done
+        stop_hint="The service did not stop; check $data_dir/server.log"
+    fi
+    "$install_dir/tallyd" check-stopped "$data_dir" || fail "Tally is still running. $stop_hint, then retry uninstall."
     verified_stopped=1
 fi
 if [ "$remove_databases" = 1 ]; then

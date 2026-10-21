@@ -31,13 +31,51 @@ sha256_file() {
     if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d ' ' -f1
     else shasum -a 256 "$1" | cut -d ' ' -f1; fi
 }
-fetch_database() (
+file_size() { if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; else printf '0\n'; fi; }
+megabytes() { awk -v bytes="$1" 'BEGIN { printf "%.1f", bytes / 1048576 }'; }
+# Every listed source serves the same pinned bytes, so one partial file resumes from any of them.
+load_asset() {
+    local row url
+    row="$(awk -F '|' -v db="$1" -v platform="$platform" '$1==db && $2==platform {print}' "$script_dir/database-assets.tsv")"
+    [ "$(printf '%s\n' "$row" | wc -l | tr -d ' ')" = 1 ] && [ -n "$row" ] || fail "No unique pinned $1 download for $platform"
+    IFS='|' read -r component target version format archive_root digest size urls <<< "$row"
+    [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?$ && "$digest" =~ ^[a-f0-9]{64}$ && "$size" =~ ^[1-9][0-9]*$ ]] || fail 'Invalid database manifest'
+    read -r -a sources <<< "$urls"
+    [ "${#sources[@]}" -gt 0 ] || fail 'Invalid database manifest'
+    for url in "${sources[@]}"; do
+        case "$url" in https://packages.clickhouse.com/tgz/stable/*|https://github.com/theseus-rs/postgresql-binaries/releases/download/*|https://github.com/ClickHouse/ClickHouse/releases/download/*) ;; *) fail 'Unexpected database download host' ;; esac
+    done
+    partial="$TALLY_RUNTIME_DIR/.partial-$1-$digest"
+}
+# Each attempt continues the partial file, so a dropped connection keeps what already arrived.
+download_archive() {
+    local attempt=1 i status
+    while :; do
+        for i in "${!sources[@]}"; do
+            status=0
+            curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fLsS -C - --connect-timeout 30 \
+                --speed-limit 10240 --speed-time 60 "${sources[$i]}" -o "$partial" &
+            transfer=$!
+            wait "$transfer" || status=$?
+            [ "$status" != 0 ] || return 0
+            # The server ignored the byte range, so appending would corrupt the archive.
+            [ "$status" != 33 ] || : > "$partial"
+            [ "$((i + 1))" = "${#sources[@]}" ] || printf '  > Trying the next official %s download source...\n' "$db"
+        done
+        [ "$attempt" -lt 5 ] || return 1
+        printf '  > The %s download was interrupted. Resuming in %ss (attempt %s of 5)...\n' "$db" "$((attempt * 5))" "$((attempt + 1))"
+        sleep "$((attempt * 5))"
+        attempt=$((attempt + 1))
+    done
+}
+# Always started with &. Braces keep $! on this process: a ( ) body forks again and the kill misses it.
+# It ends with an explicit exit because bash 3.2 skips the EXIT trap when a background job just finishes.
+fetch_database() {
     db="$1"
-    row="$(awk -F '|' -v db="$db" -v platform="$platform" '$1==db && $2==platform {print}' "$script_dir/database-assets.tsv")"
-    [ "$(printf '%s\n' "$row" | wc -l | tr -d ' ')" = 1 ] && [ -n "$row" ] || fail "No unique pinned $db download for $platform"
-    IFS='|' read -r component target version format archive_root digest url <<< "$row"
-    [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?$ && "$digest" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid database manifest'
-    case "$url" in https://github.com/theseus-rs/postgresql-binaries/releases/download/*|https://github.com/ClickHouse/ClickHouse/releases/download/*) ;; *) fail 'Unexpected database download host' ;; esac
+    # Background jobs ignore Ctrl+C, so stop the transfer before a rerun can append to the same partial file.
+    transfer=
+    trap '[ -z "$transfer" ] || { kill "$transfer" 2>/dev/null; wait "$transfer" 2>/dev/null; }; exit 143' TERM
+    load_asset "$db"
     destination="$TALLY_RUNTIME_DIR/$db-$version-$platform"
     if [ "$db" = postgres ]; then executable=bin/postgres; else executable=bin/clickhouse; fi
     if [ -f "$destination/.archive-sha256" ] && [ "$(cat "$destination/.archive-sha256")" = "$digest" ] && [ -x "$destination/$executable" ]; then
@@ -46,11 +84,20 @@ fetch_database() (
         exit 0
     fi
     [ ! -e "$destination" ] || fail "Incomplete runtime at $destination. Move that directory aside and retry; keep your database data."
+    for stale in "$TALLY_RUNTIME_DIR/.partial-$db-"*; do [ "$stale" = "$partial" ] || rm -f "$stale"; done
+    # Resuming cannot repair a partial file that is already longer than the pinned archive.
+    [ "$(file_size "$partial")" -le "$size" ] || : > "$partial"
+    received="$(file_size "$partial")"
+    if [ "$received" = 0 ]; then printf '  > Downloading private %s %s (%s MB)...\n' "$db" "$version" "$(megabytes "$size")"
+    else printf '  > Resuming private %s %s (%s of %s MB already downloaded)...\n' "$db" "$version" "$(megabytes "$received")" "$(megabytes "$size")"; fi
+    : >> "$partial"
+    if [ "$received" -lt "$size" ]; then
+        download_archive || fail "$db could not be downloaded. Check your internet connection, then rerun the installer; it resumes where this download stopped."
+    fi
+    if [ "$(sha256_file "$partial")" != "$digest" ]; then rm -f "$partial"; fail "$db download checksum mismatch; rerun the installer"; fi
     stage="$(mktemp -d "$TALLY_RUNTIME_DIR/.download-$db.XXXXXX")"
     trap 'rm -rf "$stage"' EXIT
-    printf '  > Downloading private %s %s...\n' "$db" "$version"
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fLsS --retry 3 "$url" -o "$stage/archive"
-    [ "$(sha256_file "$stage/archive")" = "$digest" ] || fail "$db download checksum mismatch; rerun the installer"
+    mv "$partial" "$stage/archive"
     mkdir "$stage/runtime"
     if [ "$format" = tar ]; then
         tar -tzf "$stage/archive" > "$stage/entries"
@@ -75,28 +122,48 @@ fetch_database() (
     mv "$stage/ready" "$destination"
     printf '%s\n' "$destination" > "$TALLY_RUNTIME_DIR/$db.path"
     printf '  OK Private %s %s downloaded and verified.\n' "$db" "$version"
-)
-pids=()
-cleanup_downloads() { local pid; for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; }
+    exit 0
+}
+# Received bytes and throughput tell a slow connection apart from a stalled one.
+report_progress() {
+    local interval="$1" i received delta=0 downloading=0 details=
+    for i in "${!pids[@]}"; do
+        kill -0 "${pids[$i]}" 2>/dev/null || continue
+        if [ ! -f "${partials[$i]}" ]; then details="$details, ${dbs[$i]} unpacking"; continue; fi
+        received="$(file_size "${partials[$i]}")"
+        if [ "$received" -ge "${sizes[$i]}" ]; then details="$details, ${dbs[$i]} verifying"
+        else details="$details, ${dbs[$i]} $(megabytes "$received") of $(megabytes "${sizes[$i]}") MB"; downloading=1; fi
+        [ "$received" -lt "${seen[$i]}" ] || delta=$((delta + received - ${seen[$i]}))
+        seen[$i]="$received"
+    done
+    [ -n "$details" ] || return 0
+    if [ "$downloading" = 1 ]; then details="$details, $(megabytes "$((delta / interval))") MB/s"; fi
+    printf '  > Still preparing private databases (%ss elapsed): %s.\n' "$((SECONDS - began))" "${details#, }"
+}
+pids=(); dbs=(); partials=(); sizes=(); seen=()
+# Wait for every transfer to stop before the lock is released.
+cleanup_downloads() { local pid; for pid in ${pids[@]+"${pids[@]}"}; do kill "$pid" 2>/dev/null || true; done; wait; }
 trap 'cleanup_downloads; exit 130' INT
 trap 'cleanup_downloads; exit 143' TERM
+# Validate every manifest row before any download starts.
 for db in postgres clickhouse; do
     if [ "$db" = postgres ]; then mode="${TALLY_POSTGRES_MODE:-native}"; else mode="${TALLY_CLICKHOUSE_MODE:-native}"; fi
     [ "$mode" = native ] || continue
-    fetch_database "$db" & pids+=("$!")
+    load_asset "$db"
+    dbs+=("$db"); partials+=("$partial"); sizes+=("$size"); seen+=("$(file_size "$partial")")
 done
 status=0
-if [ "${#pids[@]}" -gt 0 ]; then
-    started=$SECONDS
+if [ "${#dbs[@]}" -gt 0 ]; then
+    for db in "${dbs[@]}"; do fetch_database "$db" & pids+=("$!"); done
+    began=$SECONDS; reported=$SECONDS
     while :; do
         active=0
         for pid in "${pids[@]}"; do if kill -0 "$pid" 2>/dev/null; then active=1; fi; done
         [ "$active" = 1 ] || break
         sleep 1
-        elapsed=$((SECONDS - started))
-        if [ "$elapsed" -ge 10 ]; then
-            printf '  > Still downloading or verifying private databases (%ss elapsed). Large files can take a few minutes.\n' "$SECONDS"
-            started=$SECONDS
+        if [ "$((SECONDS - reported))" -ge 10 ]; then
+            report_progress "$((SECONDS - reported))"
+            reported=$SECONDS
         fi
     done
     for pid in "${pids[@]}"; do wait "$pid" || status=1; done

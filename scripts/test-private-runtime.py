@@ -50,7 +50,7 @@ def main():
         (runtime/'.tally-runtime').write_text(str(config)+'\n')
         platform = ('darwin' if os.uname().sysname == 'Darwin' else 'linux') + ('-arm64' if os.uname().machine in ('arm64','aarch64') else '-amd64')
         rows = [line.split('|') for line in (ROOT/'scripts/database-assets.tsv').read_text().splitlines() if line and not line.startswith('#')]
-        for db, target, version, kind, archive_root, digest, url in rows:
+        for db, target, version, kind, archive_root, digest, size, urls in rows:
             if target != platform: continue
             destination = runtime/f'{db}-{version}-{platform}'
             if db == 'postgres':

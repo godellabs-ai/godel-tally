@@ -38,18 +38,35 @@ elif name == 'curl' and os.environ.get('BOOTSTRAP_SOURCE'):
     else:
         shutil.copyfile(source/url.rsplit('/',1)[1],args[args.index('-o')+1])
 elif name == 'curl' and any('/fixture-' in a for a in args):
-    import shutil, time
+    import time
     url=next(a for a in args if a.startswith('https://'))
-    asset=url.rsplit('/',1)[1]
+    asset=url.rsplit('/',1)[1]; db=asset.split('-')[1]
+    if os.environ.get('FAIL_DOWNLOAD_HOST') and os.environ['FAIL_DOWNLOAD_HOST'] in url:
+        print('curl: (6) Could not resolve host',file=sys.stderr); sys.exit(6)
     if os.environ.get('TEST_PARALLEL'):
         (root/('started-'+asset)).touch()
         deadline=time.monotonic()+5
         while len(list(root.glob('started-*'))) < 2:
             if time.monotonic()>deadline: sys.exit('Downloads did not overlap')
             time.sleep(.02)
-    shutil.copyfile(root/'assets'/asset,args[args.index('-o')+1])
-    if os.environ.get('CORRUPT_DATABASE') == asset.split('-')[1]:
-        pathlib.Path(args[args.index('-o')+1]).write_text('corrupt')
+    output=pathlib.Path(args[args.index('-o')+1]); data=(root/'assets'/asset).read_bytes()
+    offset=output.stat().st_size if '-C' in args and output.exists() else 0
+    if offset:
+        with (root/'resumed').open('a') as f: f.write(f'{asset} {offset}\\n')
+    stop=len(data)
+    if os.environ.get('INTERRUPT_DATABASE') == db:
+        interrupts=root/('interrupts-'+asset); count=int(interrupts.read_text()) if interrupts.exists() else 0
+        if count < int(os.environ.get('INTERRUPT_COUNT','99')):
+            interrupts.write_text(str(count+1)); stop=offset+(len(data)-offset)//2
+    with output.open('ab' if offset else 'wb') as f:
+        if os.environ.get('SLOW_DATABASE') == db:
+            middle=offset+(stop-offset)//2; f.write(data[offset:middle]); f.flush()
+            (root/'slow-curl').write_text(str(os.getpid())); time.sleep(11); offset=middle
+        f.write(data[offset:stop])
+    if stop < len(data):
+        print('curl: (56) Recv failure: Connection reset by peer',file=sys.stderr); sys.exit(56)
+    if os.environ.get('CORRUPT_DATABASE') == db:
+        output.write_text('corrupt')
 elif name == 'pg_config': print(root/'bin')
 elif name == 'brew' and args[0] == '--prefix': print(root/'brew')
 elif name in ['brew','dpkg-query','rpm','sudo'] and os.environ.get('TEST_PACKAGES'):
@@ -140,7 +157,7 @@ class Deployment(unittest.TestCase):
                         package.add(self.bin/binary,arcname=entry)
                 digest=hashlib.sha256(archive.read_bytes()).hexdigest()
                 repo='theseus-rs/postgresql-binaries' if db=='postgres' else 'ClickHouse/ClickHouse'
-                manifest.append(f'{db}|{platform}|{version}|tar|{archive_root}|{digest}|https://github.com/{repo}/releases/download/test/{archive.name}')
+                manifest.append(f'{db}|{platform}|{version}|tar|{archive_root}|{digest}|{archive.stat().st_size}|https://github.com/{repo}/releases/download/test/{archive.name}')
         (self.bundle/'scripts/database-assets.tsv').write_text('\n'.join(manifest)+'\n')
         self.env = {k: v for k,v in os.environ.items() if not k.startswith(('TALLY_','TALLY_UPGRADE_','XDG_'))}
         (self.root/"empty.env").touch()
@@ -210,6 +227,79 @@ class Deployment(unittest.TestCase):
         self.install('--no-start')
         self.assertTrue(config.read_bytes().startswith(original))
         self.assertFalse(list(Path(self.env['TALLY_RUNTIME_DIR']).glob('.download-*')))
+        self.assertFalse(list(Path(self.env['TALLY_RUNTIME_DIR']).glob('.partial-*')))
+    def test_pinned_database_manifest_lists_official_sources(self):
+        rows=[line.split('|') for line in (ROOT/'scripts/database-assets.tsv').read_text().splitlines() if line and not line.startswith('#')]
+        self.assertEqual(len(rows),8)
+        for db,platform,version,kind,archive_root,digest,size,urls in rows:
+            sources=urls.split(' ')
+            self.assertTrue(size.isdigit() and int(size)>0,(db,platform))
+            if db=='clickhouse' and platform.startswith('linux-'):
+                self.assertEqual([s.split('/')[2] for s in sources],['packages.clickhouse.com','github.com'])
+                self.assertEqual(sources[0].rsplit('/',1)[1],sources[1].rsplit('/',1)[1])
+            else:
+                self.assertEqual([s.split('/')[2] for s in sources],['github.com'],(db,platform))
+    def test_database_download_falls_back_to_the_next_official_source(self):
+        manifest=self.bundle/'scripts/database-assets.tsv'
+        rows=[]
+        for line in manifest.read_text().splitlines():
+            row=line.split('|')
+            if row[0]=='clickhouse': row[7]='https://packages.clickhouse.com/tgz/stable/'+row[7].rsplit('/',1)[1]+' '+row[7]
+            rows.append('|'.join(row))
+        manifest.write_text('\n'.join(rows)+'\n')
+        self.env['FAIL_DOWNLOAD_HOST']='packages.clickhouse.com'
+        result=self.install('--no-start')
+        urls=[next(a for a in c if a.startswith('https://')) for c in self.commands() if c[0]=='curl' and any('/fixture-clickhouse' in a for a in c)]
+        self.assertEqual([u.split('/')[2] for u in urls],['packages.clickhouse.com','github.com'])
+        self.assertIn('Trying the next official clickhouse download source',result.stdout)
+        self.assertIn('Private clickhouse 26.9.23.15 downloaded and verified',result.stdout)
+    def test_database_download_refuses_unlisted_hosts_before_downloading(self):
+        manifest=self.bundle/'scripts/database-assets.tsv'
+        manifest.write_text(manifest.read_text().replace('https://github.com/ClickHouse/ClickHouse/','https://mirror.example.test/ClickHouse/'))
+        result=self.install('--no-start',ok=False)
+        self.assertIn('Unexpected database download host',result.stderr)
+        self.assertFalse(any(c[0]=='curl' and any('/fixture-' in a for a in c) for c in self.commands()))
+    def test_interrupted_database_download_resumes_in_place(self):
+        self.env.update(INTERRUPT_DATABASE='postgres',INTERRUPT_COUNT='2')
+        result=self.install('--no-start')
+        self.assertIn('The postgres download was interrupted. Resuming',result.stdout)
+        downloads=[c for c in self.commands() if c[0]=='curl' and any('/fixture-postgres' in a for a in c)]
+        self.assertEqual(len(downloads),3)
+        self.assertTrue(all(c[c.index('-C')+1]=='-' for c in downloads))
+        self.assertEqual(len((self.root/'resumed').read_text().splitlines()),2)
+        self.assertFalse(list(Path(self.env['TALLY_RUNTIME_DIR']).glob('.partial-*')))
+    def test_failed_database_download_resumes_on_rerun(self):
+        self.env['INTERRUPT_DATABASE']='postgres'
+        result=self.install('--no-start',ok=False)
+        self.assertIn('postgres could not be downloaded',result.stderr)
+        self.assertIn('resumes where this download stopped',result.stderr)
+        self.assertFalse(any(c[0]=='initdb' for c in self.commands()))
+        partial=next(Path(self.env['TALLY_RUNTIME_DIR']).glob('.partial-postgres-*'))
+        kept=partial.stat().st_size
+        self.assertGreater(kept,0)
+        self.env.pop('INTERRUPT_DATABASE')
+        result=self.install('--no-start')
+        self.assertIn('Resuming private postgres 18.6.1',result.stdout)
+        self.assertEqual((self.root/'resumed').read_text().splitlines()[-1].split(' ')[1],str(kept))
+        self.assertFalse(partial.exists())
+    def test_slow_database_download_reports_received_bytes(self):
+        self.env['SLOW_DATABASE']='postgres'
+        result=self.install('--no-start')
+        self.assertRegex(result.stdout,r'Still preparing private databases \(\d+s elapsed\): postgres \d+\.\d of \d+\.\d MB, \d+\.\d MB/s\.')
+    def test_cancelled_database_download_stops_transfers_and_keeps_partial(self):
+        self.env['SLOW_DATABASE']='postgres'
+        process=subprocess.Popen(['bash',str(self.bundle/'scripts/download-databases.sh')],env=self.env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        deadline=time.monotonic()+10
+        while not (self.root/'slow-curl').exists():
+            self.assertLess(time.monotonic(),deadline,'download did not start'); time.sleep(.05)
+        process.send_signal(signal.SIGINT)
+        process.communicate(timeout=10)
+        self.assertEqual(process.returncode,130)
+        # Background jobs ignore SIGINT; a surviving transfer would race the next run's resume.
+        with self.assertRaises(ProcessLookupError): os.kill(int((self.root/'slow-curl').read_text()),0)
+        runtime=Path(self.env['TALLY_RUNTIME_DIR'])
+        self.assertGreater(next(runtime.glob('.partial-postgres-*')).stat().st_size,0)
+        self.assertFalse((runtime/'.download-lock').exists())
     def test_old_openssl_fails_before_install(self):
         self.env.update(TEST_OLD_OPENSSL='1')
         result=self.install(ok=False)
@@ -432,6 +522,19 @@ class Deployment(unittest.TestCase):
         self.assertFalse(list((self.home/'Library/LaunchAgents').glob('ai.godel.tally.*.plist')))
         self.assertEqual(config.read_bytes(),saved)
         self.assertTrue((Path(self.env['TALLY_DATA_DIR'])/'postgres/PG_VERSION').exists())
+    def test_uninstall_waits_for_macos_service_to_release_supervisor(self):
+        # launchctl bootout returns while the supervisor still holds its lock.
+        self.env['TEST_OS']='Darwin'
+        self.install('--no-start')
+        data=Path(self.env['TALLY_DATA_DIR']);(data/'supervisor.lock').touch()
+        binary=Path(self.env['TALLY_INSTALL_DIR'])/'tallyd'
+        checks=self.root/'stop-checks'
+        binary.write_text(f'#!/bin/bash\necho >> "{checks}"\n[ "$(wc -l < "{checks}")" -ge 3 ]\n')
+        result=self.run_script(ROOT/'uninstall.sh')
+        self.assertIn('Waiting for the Tally service to finish stopping',result.stdout)
+        self.assertEqual(len(checks.read_text().splitlines()),4)
+        self.assertFalse(binary.exists())
+        self.assertFalse((data/'supervisor.lock').exists())
     def test_uninstall_stops_owned_containers_and_keeps_volumes(self):
         for mode,engine in [('docker','docker'),('apple','container')]:
             with self.subTest(mode=mode):
@@ -504,7 +607,7 @@ class Deployment(unittest.TestCase):
         for line in manifest.read_text().splitlines():
             row=line.split('|')
             if row[:2]==['clickhouse','darwin-arm64']:
-                row[3]='binary';row[4]='-';row[5]=hashlib.sha256(asset.read_bytes()).hexdigest()
+                row[3]='binary';row[4]='-';row[5]=hashlib.sha256(asset.read_bytes()).hexdigest();row[6]=str(asset.stat().st_size)
             rows.append('|'.join(row))
         manifest.write_text('\n'.join(rows)+'\n')
         self.install('--no-service')
