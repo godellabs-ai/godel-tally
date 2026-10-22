@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import plistlib
+import re
 import hashlib
 import tarfile
 import shutil
@@ -105,6 +106,9 @@ elif name in ['docker','container']:
         target=state/args[-1]
         if not target.exists(): sys.exit(1)
         if '--format' in args: print('true' if target.read_text()=='running' else 'false')
+        elif name=='container':
+            octet={'postgres':2,'clickhouse':3}.get(args[-1].rsplit('-',1)[-1],9)
+            print(json.dumps([{'networks':[{'address':f'192.168.64.{octet}/24','gateway':'192.168.64.1'}]}]))
     elif args[0]=='ls':
         if name=='docker': print("unknown shorthand flag: 'q' in -q",file=sys.stderr); sys.exit(125)
         print('\\n'.join(p.name for p in state.iterdir() if p.read_text()=='running'))
@@ -114,6 +118,9 @@ elif name in ['docker','container']:
         target.write_text('running' if args[0]=='start' else 'stopped')
     elif args[0]=='run':
         cid=args[args.index('--name')+1]; (state/cid).write_text('running'); print(cid)
+        if '--env-file' in args:
+            envs=root/'container-env'; envs.mkdir(exist_ok=True)
+            (envs/cid).write_text(pathlib.Path(args[args.index('--env-file')+1]).read_text())
     elif args[0] in ['rm','delete']: (state/args[1]).unlink(missing_ok=True)
     elif args[0]=='volume':
         volumes=root/'volumes';volumes.mkdir(exist_ok=True)
@@ -300,6 +307,60 @@ class Deployment(unittest.TestCase):
         runtime=Path(self.env['TALLY_RUNTIME_DIR'])
         self.assertGreater(next(runtime.glob('.partial-postgres-*')).stat().st_size,0)
         self.assertFalse((runtime/'.download-lock').exists())
+    def release_version(self):
+        return re.search(r'\[workspace\.package\]\s+version = "([^"]+)"',(ROOT/'Cargo.toml').read_text()).group(1)
+    def test_container_deployments_pull_the_release_image(self):
+        version=self.release_version()
+        compose=(ROOT/'docker-compose.yml').read_text()
+        self.assertIn('image: ${TALLY_IMAGE_PREFIX:-quay.io/godellabs-ai}/godel-tally:${TALLY_IMAGE_TAG:-'+version+'}',compose)
+        self.assertNotIn('build:',compose)
+        self.assertIn('- tally-data:/data',compose)
+        build=(ROOT/'docker-compose.build.yml').read_text()
+        self.assertIn('dockerfile: deploy/compose/Dockerfile.tallyd',build)
+        self.assertIn('- ./.local/docker-state:/data',build)
+        apple=(ROOT/'deploy/apple/tally-container.sh').read_text()
+        self.assertIn('$(setting TALLY_IMAGE_PREFIX quay.io/godellabs-ai)/godel-tally:$(setting TALLY_IMAGE_TAG '+version+')',apple)
+    def test_apple_container_deployment_uses_env_file_and_database_addresses(self):
+        self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64')
+        work=self.root/'apple deployment';work.mkdir()
+        (work/'.env').write_text('TALLY_URL=https://tally.example.test:9443\nTALLY_PUBLISH_BIND=0.0.0.0:9443\n'
+            'TALLY_SECRET_KEY=s3cret-key\nTALLY_POSTGRES_PASSWORD=pg-secret\nTALLY_CLICKHOUSE_PASSWORD=ch-secret\n'
+            '# comments are ignored\nTALLY_HTTP_BIND=127.0.0.1:1\nEMAIL_FROM=tally@example.test\n')
+        script=ROOT/'deploy/apple/tally-container.sh'
+        result=subprocess.run(['bash',str(script),'up'],cwd=work,env=self.env,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('Tally is ready at https://tally.example.test:9443',result.stdout)
+        commands=[c for c in self.commands() if c[0]=='container']
+        runs={c[c.index('--name')+1]:c for c in commands if c[1]=='run'}
+        self.assertEqual(sorted(runs),['godel-tally-stack-clickhouse','godel-tally-stack-postgres','godel-tally-stack-tallyd'])
+        app=runs['godel-tally-stack-tallyd']
+        self.assertEqual(app[-1],'quay.io/godellabs-ai/godel-tally:'+self.release_version())
+        for argument in ['0.0.0.0:9443:8443','godel-tally-stack-data:/data',f'{work.resolve()}/tls:/tls']: self.assertIn(argument,app)
+        self.assertTrue((work/'tls').is_dir())
+        self.assertFalse([c for c in commands if any(s in ' '.join(c) for s in ['s3cret-key','pg-secret','ch-secret'])])
+        env=(self.root/'container-env/godel-tally-stack-tallyd').read_text().splitlines()
+        for line in ['TALLY_POSTGRES_URL=postgres://tally:pg-secret@192.168.64.2:5432/tally','TALLY_CLICKHOUSE_URL=http://192.168.64.3:8123?user=tally',
+                     'TALLY_SECRET_KEY=s3cret-key','EMAIL_FROM=tally@example.test','TALLY_UPGRADE_WEB_ORIGIN=https://tally.example.test:9443']:
+            self.assertIn(line,env)
+        self.assertEqual([l for l in env if l.startswith('TALLY_HTTP_BIND=')],['TALLY_HTTP_BIND=0.0.0.0:8443'])
+        self.assertIn('POSTGRES_PASSWORD=pg-secret',(self.root/'container-env/godel-tally-stack-postgres').read_text())
+        self.assertIn('CLICKHOUSE_PASSWORD=ch-secret',(self.root/'container-env/godel-tally-stack-clickhouse').read_text())
+        # A rerun keeps the databases and their volumes, and recreates only the application.
+        (self.root/'commands').unlink()
+        result=subprocess.run(['bash',str(script),'up'],cwd=work,env=self.env,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        commands=[c for c in self.commands() if c[0]=='container']
+        self.assertEqual([c[c.index('--name')+1] for c in commands if c[1]=='run'],['godel-tally-stack-tallyd'])
+        self.assertIn(['container','delete','godel-tally-stack-tallyd'],commands)
+        self.assertFalse(any(c[1:3]==['volume','create'] for c in commands))
+    def test_apple_container_deployment_requires_secrets_in_env_file(self):
+        self.env.update(TEST_OS='Darwin',TEST_ARCH='arm64')
+        work=self.root/'apple';work.mkdir()
+        (work/'.env').write_text('TALLY_SECRET_KEY=s3cret-key\n')
+        result=subprocess.run(['bash',str(ROOT/'deploy/apple/tally-container.sh'),'up'],cwd=work,env=self.env,text=True,capture_output=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('Set TALLY_POSTGRES_PASSWORD in .env',result.stderr)
+        self.assertFalse(any(c[0]=='container' and c[1]=='run' for c in self.commands()))
     def test_old_openssl_fails_before_install(self):
         self.env.update(TEST_OLD_OPENSSL='1')
         result=self.install(ok=False)

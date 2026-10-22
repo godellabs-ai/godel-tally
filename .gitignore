@@ -31,3 +31,5 @@ registry-data/dist/*.tmp
 
 /apps/web/out/
 /apps/web/.tally-export/
+# Compose certificate folder (docker-compose.yml mounts ./tls)
+/tls/

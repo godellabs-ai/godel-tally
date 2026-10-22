@@ -23,6 +23,5 @@ chmod 700 .local/docker-tls
 cp "${TALLY_TLS_CERT_FILE:-.local/tls/tally.crt}" .local/docker-tls/tally.crt
 cp "${TALLY_TLS_KEY_FILE:-.local/tls/tally.key}" .local/docker-tls/tally.key
 chmod 644 .local/docker-tls/tally.crt .local/docker-tls/tally.key
-export TALLY_TLS_CERT_FILE="$root/.local/docker-tls/tally.crt"
-export TALLY_TLS_KEY_FILE="$root/.local/docker-tls/tally.key"
-exec docker compose -f docker-compose.yml up --build -d
+export TALLY_TLS_DIR="$root/.local/docker-tls"
+exec docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d

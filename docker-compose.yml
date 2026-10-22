@@ -1,13 +1,16 @@
 name: godel-tally
 
-# Secondary deployment: the same combined binary in one application container.
+# Container deployment: download this file, create .env beside it, then run
+# docker compose up -d --wait. Every setting comes from .env:
+# https://godel-labs.ai/docs/tally/installation#docker-compose
+# A source checkout builds the image instead with make docker-up (docker-compose.build.yml).
 services:
   postgres:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: tally
-      POSTGRES_PASSWORD: ${TALLY_POSTGRES_PASSWORD:?Set TALLY_POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${TALLY_POSTGRES_PASSWORD:?Set TALLY_POSTGRES_PASSWORD in .env}
       POSTGRES_DB: tally
     volumes:
       - tally-postgres:/var/lib/postgresql
@@ -23,7 +26,7 @@ services:
     environment:
       CLICKHOUSE_DB: tally
       CLICKHOUSE_USER: tally
-      CLICKHOUSE_PASSWORD: ${TALLY_CLICKHOUSE_PASSWORD:?Set TALLY_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_PASSWORD: ${TALLY_CLICKHOUSE_PASSWORD:?Set TALLY_CLICKHOUSE_PASSWORD in .env}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - tally-clickhouse:/var/lib/clickhouse
@@ -34,17 +37,14 @@ services:
       retries: 60
 
   tallyd:
-    user: "${TALLY_UID:-65532}:${TALLY_GID:-65532}"
+    image: ${TALLY_IMAGE_PREFIX:-quay.io/godellabs-ai}/godel-tally:${TALLY_IMAGE_TAG:-0.1.3}
     env_file:
       - path: .env
         required: false
-    build:
-      context: .
-      dockerfile: deploy/compose/Dockerfile.tallyd
     restart: unless-stopped
     environment:
       TALLY_CLICKHOUSE_URL: http://clickhouse:8123?user=tally
-      TALLY_CLICKHOUSE_PASSWORD: ${TALLY_CLICKHOUSE_PASSWORD:?Set TALLY_CLICKHOUSE_PASSWORD}
+      TALLY_CLICKHOUSE_PASSWORD: ${TALLY_CLICKHOUSE_PASSWORD:?Set TALLY_CLICKHOUSE_PASSWORD in .env}
       TALLY_CLICKHOUSE_DATABASE: tally
       TALLY_AI_LOG_RETENTION_DAYS: ${TALLY_AI_LOG_RETENTION_DAYS:-90}
       TALLY_HTTP_BIND: 0.0.0.0:8443
@@ -52,18 +52,16 @@ services:
       TALLY_POSTGRES_URL: ${TALLY_POSTGRES_URL:-postgres://tally:${TALLY_POSTGRES_PASSWORD}@postgres:5432/tally}
       TALLY_LOG: tally=info,tower_http=info
       TALLY_LOG_FORMAT: json
-      TALLY_SECRET_KEY: ${TALLY_SECRET_KEY:?Set TALLY_SECRET_KEY}
+      TALLY_SECRET_KEY: ${TALLY_SECRET_KEY:?Set TALLY_SECRET_KEY in .env}
       TALLY_URL: ${TALLY_URL:-https://localhost:8443}
-      TALLY_TLS_CERT_FILE: /tls/tally.crt
-      TALLY_TLS_KEY_FILE: /tls/tally.key
       TALLY_MAINTENANCE_DIR: /data/maintenance
       TALLY_UPGRADE_HOST_REQUIRED: "1"
       TALLY_UPGRADE_STATE_DIR: /data/upgrade
       TALLY_UPGRADE_WEB_ORIGIN: ${TALLY_URL:-https://localhost:8443}
     volumes:
-      - ./.local/docker-state:/data
-      - ${TALLY_TLS_CERT_FILE:-./.local/tls/tally.crt}:/tls/tally.crt:ro
-      - ${TALLY_TLS_KEY_FILE:-./.local/tls/tally.key}:/tls/tally.key:ro
+      - tally-data:/data
+      # Put tally.crt and tally.key here for your own certificate; leave it empty for a self-signed one.
+      - ${TALLY_TLS_DIR:-./tls}:/tls:ro
     ports:
       - "${TALLY_PUBLISH_BIND:-127.0.0.1:8443}:8443"
     depends_on:
@@ -72,7 +70,7 @@ services:
       clickhouse:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --cacert /tls/tally.crt --connect-to '::127.0.0.1:8443' \"$$TALLY_URL/api/v1/tally/health/ready\""]
+      test: ["CMD-SHELL", "cert=/data/tls/supplied/tally.crt; [ -f \"$$cert\" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert \"$$cert\" --connect-to '::127.0.0.1:8443' \"$$TALLY_URL/api/v1/tally/health/ready\""]
       interval: 5s
       timeout: 3s
       retries: 60
@@ -80,3 +78,4 @@ services:
 volumes:
   tally-postgres:
   tally-clickhouse:
+  tally-data:

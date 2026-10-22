@@ -82,10 +82,42 @@ Choose another HTTPS port with `--port`, for example `bash install-tally.sh --po
 Reinstalling without this option keeps the saved port.
 
 Open **https://localhost:8443** (or your selected port) and create the first administrator account. The local certificate is
-self-signed. To use Docker or Apple containers for the databases, run `bash install-tally.sh --db docker`
-or `bash install-tally.sh --db apple`. [Existing databases](https://godel-labs.ai/docs/tally/database-options#existing-databases)
-are supported too. For native Rust/Next.js development with live reload, follow the
+self-signed. [Existing databases](https://godel-labs.ai/docs/tally/installation#existing-databases)
+are supported too. To run everything in containers instead, see
+[Run in containers](#run-in-containers). For native Rust/Next.js development with live reload, follow the
 [development setup](https://godel-labs.ai/docs/tally/development).
+
+### Run in containers
+
+As an alternative to the binary installer, run Tally, PostgreSQL, and ClickHouse with Docker Compose.
+The Tally image is published as `quay.io/godellabs-ai/godel-tally` for linux/amd64 and linux/arm64;
+no Tally binary is downloaded. Every setting lives in `.env` beside the Compose file, so create it first:
+
+```bash
+mkdir -p ~/godel-tally && cd ~/godel-tally
+curl -fsSLO https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/docker-compose.yml
+(umask 077 && cat > .env <<EOF
+TALLY_URL=https://localhost:8443
+TALLY_PUBLISH_BIND=127.0.0.1:8443
+TALLY_SECRET_KEY=$(openssl rand -hex 32)
+TALLY_POSTGRES_PASSWORD=$(openssl rand -hex 32)
+TALLY_CLICKHOUSE_PASSWORD=$(openssl rand -hex 32)
+EOF
+)
+docker compose up -d --wait
+```
+
+Tally creates a self-signed certificate on first start; put `tally.crt` and `tally.key` in the `tls`
+folder beside the Compose file to use your own. On an Apple silicon Mac with macOS 26, the same `.env`
+works with [Apple container](https://github.com/apple/container):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/deploy/apple/tally-container.sh
+bash tally-container.sh up
+```
+
+See the [container installation guide](https://godel-labs.ai/docs/tally/installation#containers) for
+HTTPS, updates, and removal.
 
 ### Follow the setup progress
 
@@ -236,7 +268,9 @@ make run         # Run locally; Docker databases by default
 ```
 
 Release binaries are available for Linux and macOS on amd64 and arm64. The installer supports private downloaded (`native`),
-Docker, Apple-container, or existing databases, independently for PostgreSQL and ClickHouse.
+Docker, Apple-container, or existing databases, independently for PostgreSQL and ClickHouse. The same
+executable is published as the `quay.io/godellabs-ai/godel-tally` image for the
+[container deployment](#run-in-containers); `make push-image` publishes it for linux/amd64 and linux/arm64.
 See [installation and operations](https://godel-labs.ai/docs/tally/installation) for deployment details.
 
 ### Tally and Gödel Gate

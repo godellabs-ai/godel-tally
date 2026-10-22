@@ -1,0 +1,11 @@
+# Source checkout (make docker-up): build the image from this repository and keep application state
+# in .local/docker-state, where the host upgrade wrapper (scripts/docker-upgrade.sh) expects it.
+services:
+  tallyd:
+    image: godel-tally:source
+    build:
+      context: .
+      dockerfile: deploy/compose/Dockerfile.tallyd
+    user: "${TALLY_UID:?Run make docker-up}:${TALLY_GID:?Run make docker-up}"
+    volumes:
+      - ./.local/docker-state:/data

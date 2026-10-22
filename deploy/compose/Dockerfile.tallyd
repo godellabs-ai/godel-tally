@@ -1,3 +1,7 @@
+# source (default) compiles tallyd in the image build. prebuilt packages static binaries supplied
+# with --build-context tallyd-binaries=DIR as DIR/linux-<arch>/tallyd; scripts/push-image.sh uses it.
+ARG TALLYD_BINARY_STAGE=source
+
 FROM node:24-bookworm-slim AS web
 WORKDIR /src/apps/web
 COPY apps/web/package*.json ./
@@ -15,15 +19,28 @@ RUN cargo run --locked -p tally-registry-cli -- build \
       --source registry-data/source --output registry-data/dist \
     && cargo build --locked --profile container -p tallyd --features embedded-ui
 
-FROM debian:trixie-slim
+FROM debian:trixie-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/godellabs-ai/godel-tally" \
       org.opencontainers.image.licenses="Apache-2.0"
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl openssl \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir /data && chown 65532:65532 /data
-COPY --from=builder /src/target/container/tallyd /usr/local/bin/tallyd
+COPY scripts/ensure-tally-tls.sh scripts/check-tls-host.sh /usr/local/lib/tally/scripts/
+COPY deploy/compose/entrypoint.sh /usr/local/bin/tally-entrypoint
 WORKDIR /data
-USER 65532:65532
 EXPOSE 8443
-ENTRYPOINT ["tallyd"]
+# Starts as root only to stage a supplied certificate, then runs tallyd as 65532.
+ENTRYPOINT ["tally-entrypoint"]
+
+FROM runtime AS source
+COPY --from=builder /src/target/container/tallyd /usr/local/bin/tallyd
+
+# Placeholder replaced by --build-context tallyd-binaries=DIR.
+FROM scratch AS tallyd-binaries
+
+FROM runtime AS prebuilt
+ARG TARGETARCH
+COPY --from=tallyd-binaries linux-${TARGETARCH}/tallyd /usr/local/bin/tallyd
+
+FROM ${TALLYD_BINARY_STAGE}

@@ -1,10 +1,13 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package release-local docker-up docker-down
+.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package release-local publish-release push-image docker-up docker-down
 
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 COMPOSE_FILE ?= docker-compose.yml
 DEV_COMPOSE_FILE ?= docker-compose.dev.yml
+BUILD_COMPOSE_FILE ?= docker-compose.build.yml
+# Published images are public on Quay; pushing needs `docker login quay.io`.
+TALLY_IMAGE_PREFIX ?= quay.io/godellabs-ai
 GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 
 help:
@@ -14,10 +17,12 @@ help:
 	@echo "  make dev         Native Rust/Next.js live reload; Docker databases by default"
 	@echo "  make data-up     Start databases (TALLY_DB_MODE=docker|apple|existing)"
 	@echo "  make down        Stop local database containers, preserving volumes"
-	@echo "  make docker-up   Optional full Docker deployment (builds the Tally image)"
+	@echo "  make docker-up   Run the Compose deployment with an image built from this checkout"
 	@echo "  make check       Format, lint, test and validate the embedded UI"
 	@echo "  make package     Create a release archive for this host architecture"
 	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
+	@echo "  make publish-release Tag HEAD and publish the four archives as a GitHub release"
+	@echo "  make push-image  Push the linux/amd64 + linux/arm64 image to $(TALLY_IMAGE_PREFIX)/godel-tally"
 	@echo "Customer installation: bash install.sh --port 8443 (private database downloads by default)"
 
 fmt:
@@ -80,6 +85,7 @@ secret-scan:
 compose-check:
 	TALLY_SECRET_KEY=compose-validation-only TALLY_POSTGRES_PASSWORD=validation TALLY_CLICKHOUSE_PASSWORD=validation $(COMPOSE) -f "$(COMPOSE_FILE)" config --quiet
 	TALLY_SECRET_KEY=compose-validation-only TALLY_POSTGRES_PASSWORD=validation TALLY_CLICKHOUSE_PASSWORD=validation $(COMPOSE) -f "$(COMPOSE_FILE)" -f "$(DEV_COMPOSE_FILE)" config --quiet
+	TALLY_SECRET_KEY=compose-validation-only TALLY_POSTGRES_PASSWORD=validation TALLY_CLICKHOUSE_PASSWORD=validation TALLY_UID=1000 TALLY_GID=1000 $(COMPOSE) -f "$(COMPOSE_FILE)" -f "$(BUILD_COMPOSE_FILE)" config --quiet
 
 build: registry-build web-build
 	cargo build --locked --release -p tallyd --features embedded-ui
@@ -89,6 +95,13 @@ package: build
 
 release-local:
 	bash scripts/build-release.sh
+
+# Needs a clean, pushed commit, a CHANGELOG entry and `gh auth login`.
+publish-release:
+	bash scripts/publish-release.sh
+
+push-image:
+	TALLY_IMAGE_PREFIX="$(TALLY_IMAGE_PREFIX)" bash scripts/push-image.sh
 
 data-up:
 	bash scripts/data-services.sh up

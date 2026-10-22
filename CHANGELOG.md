@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.1.3] - 2026-10-22
+
+- Deploy Tally fully in containers from the published `quay.io/godellabs-ai/godel-tally` image: download `docker-compose.yml`, create `.env`, and run `docker compose up`, with no Tally binary or source checkout. All settings, including generated secrets, live in `.env`.
+- Run the same deployment with Apple container using `deploy/apple/tally-container.sh` and the same `.env`.
+- Create a self-signed certificate in the container's data volume on first start, or use `tally.crt` and `tally.key` from the `tls` folder; the container drops root before starting Tally.
+- Publish the linux/amd64 and linux/arm64 image with `make push-image`, packaging the cross-compiled release binary so no Rust code is compiled under emulation.
+- `make docker-up` builds the image from a source checkout through `docker-compose.build.yml` and keeps its existing state directory.
+- Publish a GitHub release with `make publish-release`: it builds or reuses verified archives for the current commit, tags it, uploads the four platform archives and `SHA256SUMS`, and checks the published files.
+
 ## [0.1.2] - 2026-10-22
 
 - Resume interrupted PostgreSQL and ClickHouse downloads instead of restarting them. Each attempt continues from the data already received, a stalled connection is reopened, and rerunning the installer after a failure or Ctrl+C resumes the partial download.
@@ -45,3 +54,5 @@ Tally is alpha software. APIs, schemas, and operational behavior may change befo
 [0.1.1]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.1
 
 [0.1.2]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.2
+
+[0.1.3]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.3
