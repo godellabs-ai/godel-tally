@@ -91,7 +91,7 @@ are supported too. To run everything in containers instead, see
 
 As an alternative to the binary installer, run Tally, PostgreSQL, and ClickHouse with Docker Compose.
 The Tally image is published as `quay.io/godellabs-ai/godel-tally` for linux/amd64 and linux/arm64;
-no Tally binary is downloaded. Every setting lives in `.env` beside the Compose file, so create it first:
+the application runs from a `scratch` image with a static binary and CA certificates. Every setting lives in `.env` beside the Compose file, so create it first:
 
 ```bash
 mkdir -p ~/godel-tally && cd ~/godel-tally
@@ -106,6 +106,17 @@ EOF
 )
 docker compose up -d --wait
 ```
+
+If Compose reports `unhealthy`, inspect both startup progress and the last probe errors:
+
+```bash
+docker compose logs --tail=100 tallyd
+docker inspect "$(docker compose ps -aq tallyd)" --format '{{json .State.Health}}'
+docker compose exec tallyd /usr/local/bin/tallyd healthcheck
+```
+
+The built-in probe connects to the internal listener without a proxy or public DNS lookup and verifies
+the HTTPS certificate. The image has no shell or curl. Keep the `.env` and data volumes when retrying.
 
 Tally creates a self-signed certificate on first start; put `tally.crt` and `tally.key` in the `tls`
 folder beside the Compose file to use your own. On an Apple silicon Mac with macOS 26, the same `.env`

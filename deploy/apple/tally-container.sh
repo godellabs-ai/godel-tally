@@ -46,7 +46,7 @@ for key in TALLY_SECRET_KEY TALLY_POSTGRES_PASSWORD TALLY_CLICKHOUSE_PASSWORD; d
 done
 url="$(setting TALLY_URL https://localhost:2357)"
 publish="$(setting TALLY_PUBLISH_BIND 127.0.0.1:2357)"
-image="$(setting TALLY_IMAGE_PREFIX quay.io/godellabs-ai)/godel-tally:$(setting TALLY_IMAGE_TAG 0.1.3)"
+image="$(setting TALLY_IMAGE_PREFIX quay.io/godellabs-ai)/godel-tally:$(setting TALLY_IMAGE_TAG 0.1.4)"
 tls_dir="$(setting TALLY_TLS_DIR ./tls)"
 mkdir -p "$tls_dir"
 tls_dir="$(cd "$tls_dir" && pwd)"
@@ -76,15 +76,17 @@ for db in postgres clickhouse; do
     fi
 done
 wait_for() {
-    local name="$1" check="$2" attempt
+    local name="$1" attempt
+    shift
     for attempt in $(seq 1 120); do
-        if container exec "$name" sh -c "$check" >/dev/null 2>&1; then return 0; fi
+        if container exec "$name" "$@" >"$work/readiness.log" 2>&1; then return 0; fi
         sleep 1
     done
+    cat "$work/readiness.log" >&2
     fail "$name did not become ready; inspect: container logs $name"
 }
-wait_for "$prefix-postgres" 'pg_isready -h 127.0.0.1 -U tally -d tally'
-wait_for "$prefix-clickhouse" 'test "$(cat /proc/1/comm)" = clickhouse-serv && clickhouse-client --user tally --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1"'
+wait_for "$prefix-postgres" sh -c 'pg_isready -h 127.0.0.1 -U tally -d tally'
+wait_for "$prefix-clickhouse" sh -c 'test "$(cat /proc/1/comm)" = clickhouse-serv && clickhouse-client --user tally --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1"'
 # Containers reach each other by address; addresses can change when a database restarts.
 address() {
     local ip
@@ -105,7 +107,7 @@ managed='TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_HTTP_BIND TALLY_PO
     # Generated passwords are hexadecimal. URL-encode manually supplied PostgreSQL passwords.
     printf 'TALLY_POSTGRES_URL=%s\n' "$(setting TALLY_POSTGRES_URL "postgres://tally:$(setting TALLY_POSTGRES_PASSWORD)@$postgres_ip:5432/tally")"
     printf 'TALLY_AI_LOG_RETENTION_DAYS=%s\n' "$(setting TALLY_AI_LOG_RETENTION_DAYS 90)"
-    printf 'TALLY_HTTP_BIND=0.0.0.0:2357\nTALLY_LOG=tally=info,tower_http=info\nTALLY_LOG_FORMAT=json\n'
+    printf 'TALLY_HTTP_BIND=0.0.0.0:2357\nTALLY_LOG=info,tower_http=info\nTALLY_LOG_FORMAT=json\n'
     printf 'TALLY_URL=%s\nTALLY_UPGRADE_WEB_ORIGIN=%s\n' "$url" "$url"
     printf 'TALLY_MAINTENANCE_DIR=/data/maintenance\nTALLY_UPGRADE_HOST_REQUIRED=1\nTALLY_UPGRADE_STATE_DIR=/data/upgrade\n'
 } > "$work/tallyd.env"
@@ -113,5 +115,5 @@ managed='TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_HTTP_BIND TALLY_PO
 if exists "$prefix-tallyd"; then container stop "$prefix-tallyd" >/dev/null 2>&1 || true; container delete "$prefix-tallyd" >/dev/null; fi
 container run -d --name "$prefix-tallyd" --env-file "$work/tallyd.env" -p "$publish:2357" \
     -v "$prefix-data:/data" -v "$tls_dir:/tls" "$image" >/dev/null
-wait_for "$prefix-tallyd" 'cert=/data/tls/supplied/tally.crt; [ -f "$cert" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert "$cert" --connect-to "::127.0.0.1:2357" "$TALLY_URL/api/v1/tally/health/ready"'
+wait_for "$prefix-tallyd" /usr/local/bin/tallyd healthcheck
 echo "Tally is ready at $url"

@@ -76,6 +76,7 @@ async fn serve_controlled(
         let app = app.clone();
         let tls = tls.clone();
         let server = async move {
+            tracing::info!(%bind, https = tls.is_some(), "starting Tally listener");
             if let Some(tls) = tls {
                 axum_server::bind_rustls(bind, tls)
                     .handle(server_handle)

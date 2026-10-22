@@ -17,6 +17,7 @@ use tracing_subscriber::EnvFilter;
 mod auth;
 #[cfg(test)]
 mod auth_integration;
+mod container;
 mod email;
 mod gate_rekey;
 mod host;
@@ -24,18 +25,29 @@ mod runtime_control;
 mod supervisor;
 mod ui;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // Outbound SDKs enable multiple rustls providers; select one explicitly for TLS serving.
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let args: Vec<_> = std::env::args().skip(1).collect();
+    // Drop container privileges before creating any runtime threads, then re-exec as PID 1.
+    if args.first().is_some_and(|arg| arg == "container") {
+        anyhow::ensure!(args.len() == 1, "container takes no arguments");
+        return container::run();
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async_main(args))
+}
+
+async fn async_main(args: Vec<String>) -> Result<()> {
     if args.first().is_some_and(|arg| arg == "--version") {
         println!("tallyd {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
     if args.first().is_some_and(|arg| arg == "--help") {
         println!(
-            "tallyd [--version | --check-ui | supervise | check-tls-host CERT HOST | collector <command> | rekey-for-gate]\nRun Tally API, UI, connector worker and Gate upgrades. Configuration: TALLY_* environment variables."
+            "tallyd [--version | --check-ui | container | healthcheck | supervise | check-tls-host CERT HOST | collector <command> | rekey-for-gate]\nRun Tally API, UI, connector worker and Gate upgrades. Configuration: TALLY_* environment variables."
         );
         return Ok(());
     }
@@ -49,6 +61,10 @@ async fn main() -> Result<()> {
     }
     if args.first().is_some_and(|arg| arg == "rekey-for-gate") {
         return gate_rekey::run().await;
+    }
+    if args.first().is_some_and(|arg| arg == "healthcheck") {
+        anyhow::ensure!(args.len() == 1, "healthcheck takes no arguments");
+        return container::healthcheck().await;
     }
     if args.first().is_some_and(|arg| arg == "check-tls-host") {
         use rustls::pki_types::pem::PemObject;
@@ -84,11 +100,16 @@ async fn main() -> Result<()> {
 
 async fn run(config: TallyConfig) -> Result<()> {
     let _ = tokio::fs::remove_file(runtime_control::marker("writers-drained")).await;
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "starting Tally; connecting to PostgreSQL"
+    );
     let postgres = Arc::new(
         PostgresStore::connect(config.postgres_url.expose())
             .await
             .context("connect to PostgreSQL")?,
     );
+    info!("applying PostgreSQL migrations");
     postgres.migrate().await.context("migrate PostgreSQL")?;
     let recovered_scans = postgres
         .recover_interrupted_scans()
@@ -99,9 +120,11 @@ async fn run(config: TallyConfig) -> Result<()> {
     }
 
     let secret_cipher = SecretCipher::from_env().context("load TALLY_SECRET_KEY")?;
+    info!("loading Tally registry and runtime");
     let state = tally_api::state_from_store(postgres.clone(), secret_cipher.clone())
         .await
         .context("initialize Tally runtime")?;
+    info!("connecting to ClickHouse and applying migrations");
     let state = tally_api::with_clickhouse(
         state,
         &clickhouse_url(
@@ -122,25 +145,8 @@ async fn run(config: TallyConfig) -> Result<()> {
     .await
     .context("initialize Tally AI log storage")?;
 
-    let auth_pool = sqlx::PgPool::connect(config.postgres_url.expose())
-        .await
-        .context("connect standalone authentication database")?;
-    let mut auth_migrator = sqlx::migrate!("./migrations");
-    auth_migrator.dangerous_set_table_name("tally_auth_migrations");
-    auth_migrator
-        .run(&auth_pool)
-        .await
-        .context("migrate standalone authentication tables")?;
-    let auth_state = Arc::new(auth::AuthState {
-        pool: auth_pool,
-        collector_import_token: secret_cipher.collector_import_token(),
-        cipher: secret_cipher,
-        http: reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .context("create email HTTP client")?,
-    });
+    info!("initializing authentication and upgrade services");
+    let auth_state = init_auth(config.postgres_url.expose(), secret_cipher).await?;
     let host_service = tally_upgrade::prepare()
         .await
         .context("initialize upgrade host runtime")?;
@@ -178,6 +184,31 @@ async fn run(config: TallyConfig) -> Result<()> {
         collector_state,
     )
     .await
+}
+
+async fn init_auth(
+    postgres_url: &str,
+    secret_cipher: SecretCipher,
+) -> Result<Arc<auth::AuthState>> {
+    let auth_pool = sqlx::PgPool::connect(postgres_url)
+        .await
+        .context("connect standalone authentication database")?;
+    let mut auth_migrator = sqlx::migrate!("./migrations");
+    auth_migrator.dangerous_set_table_name("tally_auth_migrations");
+    auth_migrator
+        .run(&auth_pool)
+        .await
+        .context("migrate standalone authentication tables")?;
+    Ok(Arc::new(auth::AuthState {
+        pool: auth_pool,
+        collector_import_token: secret_cipher.collector_import_token(),
+        cipher: secret_cipher,
+        http: reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .context("create email HTTP client")?,
+    }))
 }
 
 fn public_origin(app: Router, bind: std::net::SocketAddr) -> Result<Router> {

@@ -31,12 +31,16 @@ for arch in amd64 arm64; do
     mkdir "$binaries/linux-$arch"
     cp "target/$target/container/tallyd" "$binaries/linux-$arch/tallyd"
     file -b "$binaries/linux-$arch/tallyd" | grep -q "ELF 64-bit.*$machine" || fail "tallyd for linux/$arch has the wrong architecture"
+    file -b "$binaries/linux-$arch/tallyd" | grep -Eq "static-pie linked|statically linked" || fail "tallyd for linux/$arch must be static for scratch"
 done
 for arch in amd64 arm64; do
-    printf '\nPublishing %s:%s-%s...\n' "$image" "$version" "$arch"
+    printf '\nBuilding and checking %s:%s-%s...\n' "$image" "$version" "$arch"
     docker buildx build --platform "linux/$arch" --file deploy/compose/Dockerfile.tallyd \
         --build-arg TALLYD_BINARY_STAGE=prebuilt --build-context "tallyd-binaries=$binaries" \
-        --tag "$image:$version-$arch" --push .
+        --tag "$image:$version-$arch" --load .
+    [ "$(docker run --rm --platform "linux/$arch" "$image:$version-$arch" --version)" = "tallyd $version" ] || fail "linux/$arch version check failed"
+    docker run --rm --platform "linux/$arch" "$image:$version-$arch" --check-ui
+    docker push "$image:$version-$arch"
 done
 printf '\nPublishing the amd64 + arm64 manifest for %s:%s...\n' "$image" "$version"
 docker buildx imagetools create --tag "$image:$version" "$image:$version-amd64" "$image:$version-arm64"

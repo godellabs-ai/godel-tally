@@ -9,7 +9,8 @@ RUN npm ci
 COPY apps/web/ ./
 RUN npm run build
 
-FROM rust:1.99.0-trixie AS builder
+FROM rust:1.99.0-alpine AS builder
+RUN apk add --no-cache build-base clang cmake perl linux-headers
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS
 WORKDIR /src
@@ -17,24 +18,33 @@ COPY . .
 COPY --from=web /src/apps/web/out ./apps/web/out
 RUN cargo run --locked -p tally-registry-cli -- build \
       --source registry-data/source --output registry-data/dist \
-    && cargo build --locked --profile container -p tallyd --features embedded-ui
+    && target="$(rustc -vV | sed -n 's/^host: //p')" \
+    && cargo build --locked --profile container -p tallyd --features embedded-ui --target "$target" \
+    && cp "target/$target/container/tallyd" /tallyd
 
-FROM debian:trixie-slim AS runtime
+FROM --platform=$BUILDPLATFORM debian:trixie-slim AS runtime-files
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && mkdir -p /rootfs/data /rootfs/tmp \
+    && chmod 1777 /rootfs/tmp \
+    && chown 65532:65532 /rootfs/data
+
+FROM scratch AS runtime
 LABEL org.opencontainers.image.source="https://github.com/godellabs-ai/godel-tally" \
       org.opencontainers.image.licenses="Apache-2.0"
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl openssl \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir /data && chown 65532:65532 /data
-COPY scripts/ensure-tally-tls.sh scripts/check-tls-host.sh /usr/local/lib/tally/scripts/
-COPY deploy/compose/entrypoint.sh /usr/local/bin/tally-entrypoint
+COPY --from=runtime-files /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=runtime-files /rootfs/ /
+ENV HOME=/data SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 WORKDIR /data
 EXPOSE 2357
 # Starts as root only to stage a supplied certificate, then runs tallyd as 65532.
-ENTRYPOINT ["tally-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/tallyd"]
+CMD ["container"]
+HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=60 \
+    CMD ["/usr/local/bin/tallyd", "healthcheck"]
 
 FROM runtime AS source
-COPY --from=builder /src/target/container/tallyd /usr/local/bin/tallyd
+COPY --from=builder /tallyd /usr/local/bin/tallyd
 
 # Placeholder replaced by --build-context tallyd-binaries=DIR.
 FROM scratch AS tallyd-binaries

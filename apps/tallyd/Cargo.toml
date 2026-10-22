@@ -20,6 +20,10 @@ tower = { workspace = true, features = ["util"] }
 tower-http.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 webpki = { package = "rustls-webpki", version = "0.103" }
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
+time = "0.3"
+tokio-rustls = "0.26"
+x509-cert = "0.2"
 
 anyhow.workspace = true
 argon2.workspace = true
@@ -47,6 +51,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 url.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["user"] }
 
 [lints]
 workspace = true

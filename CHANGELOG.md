@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.1.4] - 2026-10-23
+
+- Run the Tally image from `scratch` with a static musl binary and a CA bundle. Certificate generation, supplied-certificate validation, privilege dropping, and readiness checks are built into `tallyd`; no shell, curl, or OpenSSL is needed in the image. Existing data volumes and certificates are reused.
+- Probe the internal HTTPS listener directly, independently of proxy settings, public DNS, and published ports, while still verifying the configured hostname and certificate. Report connection, TLS, timeout, and unhealthy-dependency errors in Docker health output. Allow an 8-second probe within a 10-second Docker timeout and a 30-second startup grace period.
+- Log startup progress through PostgreSQL migrations, registry loading, ClickHouse migrations, authentication setup, and listener startup. Use `docker compose exec tallyd /usr/local/bin/tallyd healthcheck` to diagnose readiness.
+
 - Change the default HTTPS port from 8443 to 2357 for the installer, `make run`, Docker Compose, and Apple container deployments. Existing installations keep their saved port; Compose and Apple container deployments without `TALLY_URL` and `TALLY_PUBLISH_BIND` in `.env` move to 2357.
 
 ## [0.1.3] - 2026-10-22
@@ -58,3 +64,5 @@ Tally is alpha software. APIs, schemas, and operational behavior may change befo
 [0.1.2]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.2
 
 [0.1.3]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.3
+
+[0.1.4]: https://github.com/godellabs-ai/godel-tally/releases/tag/v0.1.4

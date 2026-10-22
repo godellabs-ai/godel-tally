@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package release-local publish-release push-image docker-up docker-down
+.PHONY: help fmt lint test check audit secret-scan compose-check build web-install web-lint web-test web-typecheck web-build web-e2e run up down schemas schema-check registry-lint registry-build dev dev-api dev-web dev-collector data-up release-readiness package release-local publish-release push-image docker-up docker-down docker-health
 
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 COMPOSE_FILE ?= docker-compose.yml
@@ -18,11 +18,12 @@ help:
 	@echo "  make data-up     Start databases (TALLY_DB_MODE=docker|apple|existing)"
 	@echo "  make down        Stop local database containers, preserving volumes"
 	@echo "  make docker-up   Run the Compose deployment with an image built from this checkout"
+	@echo "  make docker-health Show the current container readiness result"
 	@echo "  make check       Format, lint, test and validate the embedded UI"
 	@echo "  make package     Create a release archive for this host architecture"
 	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
 	@echo "  make publish-release Tag HEAD and publish the four archives as a GitHub release"
-	@echo "  make push-image  Push the linux/amd64 + linux/arm64 image to $(TALLY_IMAGE_PREFIX)/godel-tally"
+	@echo "  make push-image  Push the scratch linux/amd64 + linux/arm64 image to $(TALLY_IMAGE_PREFIX)/godel-tally"
 	@echo "Customer installation: bash install.sh --port 2357 (private database downloads by default)"
 
 fmt:
@@ -135,3 +136,6 @@ docker-up:
 
 docker-down:
 	$(COMPOSE) -f "$(COMPOSE_FILE)" down
+
+docker-health:
+	$(COMPOSE) -f "$(COMPOSE_FILE)" exec tallyd /usr/local/bin/tallyd healthcheck
