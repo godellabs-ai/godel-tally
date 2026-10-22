@@ -48,6 +48,9 @@ services:
       TALLY_CLICKHOUSE_DATABASE: tally
       TALLY_AI_LOG_RETENTION_DAYS: ${TALLY_AI_LOG_RETENTION_DAYS:-90}
       TALLY_HTTP_BIND: 0.0.0.0:2357
+      # Docker Desktop may inject proxy settings. Database traffic stays on the Compose network.
+      NO_PROXY: localhost,127.0.0.1,::1,postgres,clickhouse,${NO_PROXY:-}
+      no_proxy: localhost,127.0.0.1,::1,postgres,clickhouse,${no_proxy:-${NO_PROXY:-}}
       # Generated passwords are hexadecimal. URL-encode manually supplied PostgreSQL passwords.
       TALLY_POSTGRES_URL: ${TALLY_POSTGRES_URL:-postgres://tally:${TALLY_POSTGRES_PASSWORD}@postgres:5432/tally}
       TALLY_LOG: ${TALLY_LOG:-info,tower_http=info}

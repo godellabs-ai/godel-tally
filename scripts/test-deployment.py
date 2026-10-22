@@ -325,7 +325,7 @@ class Deployment(unittest.TestCase):
         work=self.root/'apple deployment';work.mkdir()
         (work/'.env').write_text('TALLY_URL=https://tally.example.test:9443\nTALLY_PUBLISH_BIND=0.0.0.0:9443\n'
             'TALLY_SECRET_KEY=s3cret-key\nTALLY_POSTGRES_PASSWORD=pg-secret\nTALLY_CLICKHOUSE_PASSWORD=ch-secret\n'
-            '# comments are ignored\nTALLY_HTTP_BIND=127.0.0.1:1\nEMAIL_FROM=tally@example.test\n')
+            '# comments are ignored\nTALLY_HTTP_BIND=127.0.0.1:1\nEMAIL_FROM=tally@example.test\nNO_PROXY=corp.example\n')
         script=ROOT/'deploy/apple/tally-container.sh'
         result=subprocess.run(['bash',str(script),'up'],cwd=work,env=self.env,text=True,capture_output=True)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
@@ -343,6 +343,10 @@ class Deployment(unittest.TestCase):
                      'TALLY_SECRET_KEY=s3cret-key','EMAIL_FROM=tally@example.test','TALLY_UPGRADE_WEB_ORIGIN=https://tally.example.test:9443']:
             self.assertIn(line,env)
         self.assertEqual([l for l in env if l.startswith('TALLY_HTTP_BIND=')],['TALLY_HTTP_BIND=0.0.0.0:2357'])
+        for key in ['NO_PROXY', 'no_proxy']:
+            self.assertEqual([l for l in env if l.startswith(key+'=')],
+                             [key+'=localhost,127.0.0.1,::1,192.168.64.2,192.168.64.3,corp.example'])
+        self.assertIn(['container','exec','godel-tally-stack-tallyd','/usr/local/bin/tallyd','healthcheck'],commands)
         self.assertIn('POSTGRES_PASSWORD=pg-secret',(self.root/'container-env/godel-tally-stack-postgres').read_text())
         self.assertIn('CLICKHOUSE_PASSWORD=ch-secret',(self.root/'container-env/godel-tally-stack-clickhouse').read_text())
         # A rerun keeps the databases and their volumes, and recreates only the application.

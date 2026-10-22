@@ -97,12 +97,14 @@ address() {
 postgres_ip="$(address "$prefix-postgres")"
 clickhouse_ip="$(address "$prefix-clickhouse")"
 
-managed='TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_HTTP_BIND TALLY_POSTGRES_URL TALLY_LOG TALLY_LOG_FORMAT TALLY_URL TALLY_MAINTENANCE_DIR TALLY_UPGRADE_HOST_REQUIRED TALLY_UPGRADE_STATE_DIR TALLY_UPGRADE_WEB_ORIGIN TALLY_AI_LOG_RETENTION_DAYS'
+managed='TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_HTTP_BIND TALLY_POSTGRES_URL TALLY_LOG TALLY_LOG_FORMAT TALLY_URL TALLY_MAINTENANCE_DIR TALLY_UPGRADE_HOST_REQUIRED TALLY_UPGRADE_STATE_DIR TALLY_UPGRADE_WEB_ORIGIN TALLY_AI_LOG_RETENTION_DAYS NO_PROXY no_proxy'
 {
     for line in ${settings[@]+"${settings[@]}"}; do
         case " $managed " in *" ${line%%=*} "*) ;; *) printf '%s\n' "$line" ;; esac
     done
     printf 'TALLY_CLICKHOUSE_URL=http://%s:8123?user=tally\n' "$clickhouse_ip"
+    printf 'NO_PROXY=localhost,127.0.0.1,::1,%s,%s,%s\n' "$postgres_ip" "$clickhouse_ip" "$(setting NO_PROXY)"
+    printf 'no_proxy=localhost,127.0.0.1,::1,%s,%s,%s\n' "$postgres_ip" "$clickhouse_ip" "$(setting no_proxy "$(setting NO_PROXY)")"
     printf 'TALLY_CLICKHOUSE_DATABASE=tally\n'
     # Generated passwords are hexadecimal. URL-encode manually supplied PostgreSQL passwords.
     printf 'TALLY_POSTGRES_URL=%s\n' "$(setting TALLY_POSTGRES_URL "postgres://tally:$(setting TALLY_POSTGRES_PASSWORD)@$postgres_ip:5432/tally")"
