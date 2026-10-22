@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Change the default HTTPS port from 8443 to 2357 for the installer, `make run`, Docker Compose, and Apple container deployments. Existing installations keep their saved port; Compose and Apple container deployments without `TALLY_URL` and `TALLY_PUBLISH_BIND` in `.env` move to 2357.
+
 ## [0.1.3] - 2026-10-22
 
 - Deploy Tally fully in containers from the published `quay.io/godellabs-ai/godel-tally` image: download `docker-compose.yml`, create `.env`, and run `docker compose up`, with no Tally binary or source checkout. All settings, including generated secrets, live in `.env`.

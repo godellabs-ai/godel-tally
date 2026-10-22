@@ -29,7 +29,7 @@ RUN apt-get update \
 COPY scripts/ensure-tally-tls.sh scripts/check-tls-host.sh /usr/local/lib/tally/scripts/
 COPY deploy/compose/entrypoint.sh /usr/local/bin/tally-entrypoint
 WORKDIR /data
-EXPOSE 8443
+EXPOSE 2357
 # Starts as root only to stage a supplied certificate, then runs tallyd as 65532.
 ENTRYPOINT ["tally-entrypoint"]
 

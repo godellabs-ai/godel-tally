@@ -13,7 +13,7 @@ GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79
 help:
 	@echo "Gödel Tally: single binary + PostgreSQL + ClickHouse"
 	@echo "  make build       Build release tallyd with embedded UI (no Docker)"
-	@echo "  make run         Run the built binary locally at https://localhost:8443"
+	@echo "  make run         Run the built binary locally at https://localhost:2357"
 	@echo "  make dev         Native Rust/Next.js live reload; Docker databases by default"
 	@echo "  make data-up     Start databases (TALLY_DB_MODE=docker|apple|existing)"
 	@echo "  make down        Stop local database containers, preserving volumes"
@@ -23,7 +23,7 @@ help:
 	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
 	@echo "  make publish-release Tag HEAD and publish the four archives as a GitHub release"
 	@echo "  make push-image  Push the linux/amd64 + linux/arm64 image to $(TALLY_IMAGE_PREFIX)/godel-tally"
-	@echo "Customer installation: bash install.sh --port 8443 (private database downloads by default)"
+	@echo "Customer installation: bash install.sh --port 2357 (private database downloads by default)"
 
 fmt:
 	cargo fmt --all

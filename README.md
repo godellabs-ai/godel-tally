@@ -47,7 +47,7 @@ Install the latest release on **Linux or macOS, amd64 or arm64**:
 curl -fsSL \
   https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/install.sh \
   -o install-tally.sh && \
-  bash install-tally.sh --port 8443
+  bash install-tally.sh --port 2357
 ```
 
 The script downloads the matching binary from [GitHub Releases](https://github.com/godellabs-ai/godel-tally/releases/latest),
@@ -81,7 +81,7 @@ Tally release; the installer does not fetch an untested “latest” database ve
 Choose another HTTPS port with `--port`, for example `bash install-tally.sh --port 9443`.
 Reinstalling without this option keeps the saved port.
 
-Open **https://localhost:8443** (or your selected port) and create the first administrator account. The local certificate is
+Open **https://localhost:2357** (or your selected port) and create the first administrator account. The local certificate is
 self-signed. [Existing databases](https://godel-labs.ai/docs/tally/installation#existing-databases)
 are supported too. To run everything in containers instead, see
 [Run in containers](#run-in-containers). For native Rust/Next.js development with live reload, follow the
@@ -97,8 +97,8 @@ no Tally binary is downloaded. Every setting lives in `.env` beside the Compose 
 mkdir -p ~/godel-tally && cd ~/godel-tally
 curl -fsSLO https://raw.githubusercontent.com/godellabs-ai/godel-tally/main/docker-compose.yml
 (umask 077 && cat > .env <<EOF
-TALLY_URL=https://localhost:8443
-TALLY_PUBLISH_BIND=127.0.0.1:8443
+TALLY_URL=https://localhost:2357
+TALLY_PUBLISH_BIND=127.0.0.1:2357
 TALLY_SECRET_KEY=$(openssl rand -hex 32)
 TALLY_POSTGRES_PASSWORD=$(openssl rand -hex 32)
 TALLY_CLICKHOUSE_PASSWORD=$(openssl rand -hex 32)

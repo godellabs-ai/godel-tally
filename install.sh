@@ -89,7 +89,7 @@ Options:
   --db MODE             Private downloads: native (default); or docker, apple, existing
   --postgres MODE       Choose a different mode for PostgreSQL (settings storage)
   --clickhouse MODE     Choose a different mode for ClickHouse (activity storage)
-  --port PORT           HTTPS port, 1024–65535 (default 8443; saved on reinstall)
+  --port PORT           HTTPS port, 1024–65535 (default 2357; saved on reinstall)
   --no-start            Set up automatic startup but do not start Tally now
   --no-service          Install Tally for manual startup
                         Private databases stay stopped. Container databases may still start.
@@ -112,7 +112,7 @@ installer_main() {
     case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) fail 'Tally supports Intel/AMD 64-bit and Apple silicon/ARM 64-bit computers.' ;; esac
     case "$version" in *[!A-Za-z0-9._-]*|'') fail 'Invalid TALLY_VERSION' ;; esac
     case "$repo" in *[!A-Za-z0-9._/-]*|'') fail 'Invalid TALLY_GITHUB_REPO' ;; esac
-    local args=("$@") dry_run=0 selected_port='8443 (or saved port)' mode='native (or saved choice)' pg_mode= ch_mode= startup='Start automatically when you log in'
+    local args=("$@") dry_run=0 selected_port='2357 (or saved port)' mode='native (or saved choice)' pg_mode= ch_mode= startup='Start automatically when you log in'
     install_hint='Run bash install.sh --help to see available options.'
     while [ "$#" -gt 0 ]; do
         case "$1" in

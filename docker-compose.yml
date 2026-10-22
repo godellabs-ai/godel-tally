@@ -47,30 +47,30 @@ services:
       TALLY_CLICKHOUSE_PASSWORD: ${TALLY_CLICKHOUSE_PASSWORD:?Set TALLY_CLICKHOUSE_PASSWORD in .env}
       TALLY_CLICKHOUSE_DATABASE: tally
       TALLY_AI_LOG_RETENTION_DAYS: ${TALLY_AI_LOG_RETENTION_DAYS:-90}
-      TALLY_HTTP_BIND: 0.0.0.0:8443
+      TALLY_HTTP_BIND: 0.0.0.0:2357
       # Generated passwords are hexadecimal. URL-encode manually supplied PostgreSQL passwords.
       TALLY_POSTGRES_URL: ${TALLY_POSTGRES_URL:-postgres://tally:${TALLY_POSTGRES_PASSWORD}@postgres:5432/tally}
       TALLY_LOG: tally=info,tower_http=info
       TALLY_LOG_FORMAT: json
       TALLY_SECRET_KEY: ${TALLY_SECRET_KEY:?Set TALLY_SECRET_KEY in .env}
-      TALLY_URL: ${TALLY_URL:-https://localhost:8443}
+      TALLY_URL: ${TALLY_URL:-https://localhost:2357}
       TALLY_MAINTENANCE_DIR: /data/maintenance
       TALLY_UPGRADE_HOST_REQUIRED: "1"
       TALLY_UPGRADE_STATE_DIR: /data/upgrade
-      TALLY_UPGRADE_WEB_ORIGIN: ${TALLY_URL:-https://localhost:8443}
+      TALLY_UPGRADE_WEB_ORIGIN: ${TALLY_URL:-https://localhost:2357}
     volumes:
       - tally-data:/data
       # Put tally.crt and tally.key here for your own certificate; leave it empty for a self-signed one.
       - ${TALLY_TLS_DIR:-./tls}:/tls:ro
     ports:
-      - "${TALLY_PUBLISH_BIND:-127.0.0.1:8443}:8443"
+      - "${TALLY_PUBLISH_BIND:-127.0.0.1:2357}:2357"
     depends_on:
       postgres:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "cert=/data/tls/supplied/tally.crt; [ -f \"$$cert\" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert \"$$cert\" --connect-to '::127.0.0.1:8443' \"$$TALLY_URL/api/v1/tally/health/ready\""]
+      test: ["CMD-SHELL", "cert=/data/tls/supplied/tally.crt; [ -f \"$$cert\" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert \"$$cert\" --connect-to '::127.0.0.1:2357' \"$$TALLY_URL/api/v1/tally/health/ready\""]
       interval: 5s
       timeout: 3s
       retries: 60

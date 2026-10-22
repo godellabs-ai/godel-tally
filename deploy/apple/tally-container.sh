@@ -44,8 +44,8 @@ setting() { local name="env_$1"; printf '%s' "${!name:-${2:-}}"; }
 for key in TALLY_SECRET_KEY TALLY_POSTGRES_PASSWORD TALLY_CLICKHOUSE_PASSWORD; do
     [ -n "$(setting "$key")" ] || fail "Set $key in .env"
 done
-url="$(setting TALLY_URL https://localhost:8443)"
-publish="$(setting TALLY_PUBLISH_BIND 127.0.0.1:8443)"
+url="$(setting TALLY_URL https://localhost:2357)"
+publish="$(setting TALLY_PUBLISH_BIND 127.0.0.1:2357)"
 image="$(setting TALLY_IMAGE_PREFIX quay.io/godellabs-ai)/godel-tally:$(setting TALLY_IMAGE_TAG 0.1.3)"
 tls_dir="$(setting TALLY_TLS_DIR ./tls)"
 mkdir -p "$tls_dir"
@@ -105,13 +105,13 @@ managed='TALLY_CLICKHOUSE_URL TALLY_CLICKHOUSE_DATABASE TALLY_HTTP_BIND TALLY_PO
     # Generated passwords are hexadecimal. URL-encode manually supplied PostgreSQL passwords.
     printf 'TALLY_POSTGRES_URL=%s\n' "$(setting TALLY_POSTGRES_URL "postgres://tally:$(setting TALLY_POSTGRES_PASSWORD)@$postgres_ip:5432/tally")"
     printf 'TALLY_AI_LOG_RETENTION_DAYS=%s\n' "$(setting TALLY_AI_LOG_RETENTION_DAYS 90)"
-    printf 'TALLY_HTTP_BIND=0.0.0.0:8443\nTALLY_LOG=tally=info,tower_http=info\nTALLY_LOG_FORMAT=json\n'
+    printf 'TALLY_HTTP_BIND=0.0.0.0:2357\nTALLY_LOG=tally=info,tower_http=info\nTALLY_LOG_FORMAT=json\n'
     printf 'TALLY_URL=%s\nTALLY_UPGRADE_WEB_ORIGIN=%s\n' "$url" "$url"
     printf 'TALLY_MAINTENANCE_DIR=/data/maintenance\nTALLY_UPGRADE_HOST_REQUIRED=1\nTALLY_UPGRADE_STATE_DIR=/data/upgrade\n'
 } > "$work/tallyd.env"
 # Recreate the application each time so it receives the current database addresses.
 if exists "$prefix-tallyd"; then container stop "$prefix-tallyd" >/dev/null 2>&1 || true; container delete "$prefix-tallyd" >/dev/null; fi
-container run -d --name "$prefix-tallyd" --env-file "$work/tallyd.env" -p "$publish:8443" \
+container run -d --name "$prefix-tallyd" --env-file "$work/tallyd.env" -p "$publish:2357" \
     -v "$prefix-data:/data" -v "$tls_dir:/tls" "$image" >/dev/null
-wait_for "$prefix-tallyd" 'cert=/data/tls/supplied/tally.crt; [ -f "$cert" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert "$cert" --connect-to "::127.0.0.1:8443" "$TALLY_URL/api/v1/tally/health/ready"'
+wait_for "$prefix-tallyd" 'cert=/data/tls/supplied/tally.crt; [ -f "$cert" ] || cert=/data/tls/tally.crt; curl --fail --silent --cacert "$cert" --connect-to "::127.0.0.1:2357" "$TALLY_URL/api/v1/tally/health/ready"'
 echo "Tally is ready at $url"

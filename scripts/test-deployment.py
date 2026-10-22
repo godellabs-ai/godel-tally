@@ -335,14 +335,14 @@ class Deployment(unittest.TestCase):
         self.assertEqual(sorted(runs),['godel-tally-stack-clickhouse','godel-tally-stack-postgres','godel-tally-stack-tallyd'])
         app=runs['godel-tally-stack-tallyd']
         self.assertEqual(app[-1],'quay.io/godellabs-ai/godel-tally:'+self.release_version())
-        for argument in ['0.0.0.0:9443:8443','godel-tally-stack-data:/data',f'{work.resolve()}/tls:/tls']: self.assertIn(argument,app)
+        for argument in ['0.0.0.0:9443:2357','godel-tally-stack-data:/data',f'{work.resolve()}/tls:/tls']: self.assertIn(argument,app)
         self.assertTrue((work/'tls').is_dir())
         self.assertFalse([c for c in commands if any(s in ' '.join(c) for s in ['s3cret-key','pg-secret','ch-secret'])])
         env=(self.root/'container-env/godel-tally-stack-tallyd').read_text().splitlines()
         for line in ['TALLY_POSTGRES_URL=postgres://tally:pg-secret@192.168.64.2:5432/tally','TALLY_CLICKHOUSE_URL=http://192.168.64.3:8123?user=tally',
                      'TALLY_SECRET_KEY=s3cret-key','EMAIL_FROM=tally@example.test','TALLY_UPGRADE_WEB_ORIGIN=https://tally.example.test:9443']:
             self.assertIn(line,env)
-        self.assertEqual([l for l in env if l.startswith('TALLY_HTTP_BIND=')],['TALLY_HTTP_BIND=0.0.0.0:8443'])
+        self.assertEqual([l for l in env if l.startswith('TALLY_HTTP_BIND=')],['TALLY_HTTP_BIND=0.0.0.0:2357'])
         self.assertIn('POSTGRES_PASSWORD=pg-secret',(self.root/'container-env/godel-tally-stack-postgres').read_text())
         self.assertIn('CLICKHOUSE_PASSWORD=ch-secret',(self.root/'container-env/godel-tally-stack-clickhouse').read_text())
         # A rerun keeps the databases and their volumes, and recreates only the application.

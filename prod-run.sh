@@ -22,8 +22,8 @@ else
     export TALLY_CLICKHOUSE_PASSWORD="${TALLY_CLICKHOUSE_PASSWORD:-tally-local}"
 fi
 export TALLY_DATA_DIR="${TALLY_DATA_DIR:-$root/.local/data}"
-export TALLY_URL="${TALLY_URL:-https://localhost:8443}"
-export TALLY_HTTP_BIND="${TALLY_HTTP_BIND:-127.0.0.1:8443}"
+export TALLY_URL="${TALLY_URL:-https://localhost:2357}"
+export TALLY_HTTP_BIND="${TALLY_HTTP_BIND:-127.0.0.1:2357}"
 export TALLY_UPGRADE_STATE_DIR="$root/.local/upgrade" TALLY_UPGRADE_WEB_ORIGIN="$TALLY_URL"
 export TALLY_MAINTENANCE_DIR="$root/.local/tally-maintenance"
 export TALLY_UPGRADE_TALLY_ROOT="$root" TALLY_RUNTIME_MODE=combined

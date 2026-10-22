@@ -130,12 +130,12 @@ fi
 if [ "$ch_mode" = native ]; then
     [ "$TALLY_CLICKHOUSE_URL" = "http://127.0.0.1:$TALLY_CLICKHOUSE_PORT?user=tally" ] || fail 'Private ClickHouse uses the local Tally URL. Remove your TALLY_CLICKHOUSE_URL override, or choose --clickhouse existing for an external server.'
 fi
-export TALLY_URL="${TALLY_URL:-https://localhost:8443}"
-export TALLY_HTTP_BIND="${TALLY_HTTP_BIND:-127.0.0.1:8443}"
+export TALLY_URL="${TALLY_URL:-https://localhost:2357}"
+export TALLY_HTTP_BIND="${TALLY_HTTP_BIND:-127.0.0.1:2357}"
 if [ -n "$selected_port" ]; then
     # Keep the configured hostname/address, changing only the listening/public port.
     origin_pattern='^https://([A-Za-z0-9.-]+)(:[0-9]+)?/?$'
-    [[ "$TALLY_URL" =~ $origin_pattern ]] || fail 'TALLY_URL must be an HTTPS origin such as https://tally.example.com:8443'
+    [[ "$TALLY_URL" =~ $origin_pattern ]] || fail 'TALLY_URL must be an HTTPS origin such as https://tally.example.com:2357'
     export TALLY_URL="https://${BASH_REMATCH[1]}:$selected_port"
     [[ "$TALLY_HTTP_BIND" =~ ^(.+):[0-9]+$ ]] || fail 'TALLY_HTTP_BIND must include an address and port'
     export TALLY_HTTP_BIND="${BASH_REMATCH[1]}:$selected_port"

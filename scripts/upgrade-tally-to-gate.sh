@@ -116,10 +116,10 @@ select_port() {
 tally_router_publishes_port() {
     local container
     if combined_runtime; then
-        local bind="${TALLY_HTTP_BIND:-127.0.0.1:8443}" port
+        local bind="${TALLY_HTTP_BIND:-127.0.0.1:2357}" port
         case "$(read_record mode)" in
             combined-dev) bind="${TALLY_DEV_BIND:-127.0.0.1:8080}" ;;
-            combined-compose) bind="${TALLY_PUBLISH_BIND:-127.0.0.1:8443}" ;;
+            combined-compose) bind="${TALLY_PUBLISH_BIND:-127.0.0.1:2357}" ;;
         esac
         port="${bind##*:}"
         [ "$port" = "$1" ] && [ -f "$maintenance_dir/writers-drained" ]

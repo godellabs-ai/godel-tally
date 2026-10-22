@@ -29,7 +29,7 @@ version policy will be published with the first tagged release.
 ## Deployment boundary
 
 Standalone Tally requires user authentication and serves TLS directly in `tallyd`. The native
-installer and optional Compose deployment publish `127.0.0.1:8443` by default. A shared or remote deployment should use a trusted certificate,
+installer and optional Compose deployment publish `127.0.0.1:2357` by default. A shared or remote deployment should use a trusted certificate,
 network access controls, production PostgreSQL credentials, managed secret storage, backups,
 and monitoring.
 

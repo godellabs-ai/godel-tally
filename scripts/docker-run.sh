@@ -15,7 +15,7 @@ export TALLY_UID="$(id -u)" TALLY_GID="$(id -g)"
 if ! grep -q '^TALLY_UID=' .env; then write_env TALLY_UID TALLY_GID >> .env; fi
 mkdir -p .local/docker-state
 chmod 700 .local/docker-state
-export TALLY_URL="${TALLY_URL:-https://localhost:8443}"
+export TALLY_URL="${TALLY_URL:-https://localhost:2357}"
 bash scripts/ensure-tally-tls.sh
 # Non-root app container reads copies; never change permissions of supplied private keys.
 mkdir -p .local/docker-tls
