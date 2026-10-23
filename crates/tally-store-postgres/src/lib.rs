@@ -29,6 +29,24 @@ use url::Url;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+tokio::task_local! {
+    static AUDIT_ACTOR: String;
+}
+
+/// Runs `future` with `actor` recorded on every audit event it writes.
+pub async fn with_audit_actor<F: std::future::Future>(actor: String, future: F) -> F::Output {
+    AUDIT_ACTOR.scope(actor, future).await
+}
+
+/// The signed-in user behind the current request, or `local_operator` for work that no
+/// user started, such as scheduled connector runs or embedded hosts without an identity.
+#[must_use]
+pub fn audit_actor() -> String {
+    AUDIT_ACTOR
+        .try_with(Clone::clone)
+        .unwrap_or_else(|_| "local_operator".to_owned())
+}
+
 const GOVERNANCE_FINDINGS_SQL: &str = r"
             SELECT jsonb_build_object(
                 'finding_id', f.finding_id,
@@ -1049,7 +1067,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','registry.overlay.created','registry_overlay',$3,$4)
+            VALUES ($1,$2,$5,'registry.overlay.created','registry_overlay',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1061,6 +1079,7 @@ impl PostgresStore {
             "matcher_count": request.matcher_count,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1319,7 +1338,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','classification.rules.created','classification_rule_set',$3,$4)
+            VALUES ($1,$2,$5,'classification.rules.created','classification_rule_set',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1334,6 +1353,7 @@ impl PostgresStore {
             "changed_system_count": changed.len(),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1421,7 +1441,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','classification.rules.deactivated','classification_rule_set',$3,$4)
+            VALUES ($1,$2,$5,'classification.rules.deactivated','classification_rule_set',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1431,6 +1451,7 @@ impl PostgresStore {
             "rule_set_id": rule_set_id,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1879,7 +1900,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','data.purge.completed','purge',$3,$4)
+            VALUES ($1,$2,$5,'data.purge.completed','purge',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1890,6 +1911,7 @@ impl PostgresStore {
             "deleted_counts": deleted,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2135,7 +2157,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.schedule.upserted','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.schedule.upserted','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2150,6 +2172,7 @@ impl PostgresStore {
             "credentials_sealed": job.credentials.is_some(),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2560,7 +2583,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.sync.requested','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.sync.requested','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2573,6 +2596,7 @@ impl PostgresStore {
             "source_reference_kind": job.config_refs.get("kind"),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut **transaction)
         .await?;
         Ok(())
@@ -2665,7 +2689,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.deleted','connector',$3,$4)
+            VALUES ($1,$2,$5,'connector.deleted','connector',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2680,6 +2704,7 @@ impl PostgresStore {
             "observations_retained": true,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2868,7 +2893,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.backfill.committed','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.backfill.committed','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2884,6 +2909,7 @@ impl PostgresStore {
             "preview_digest": request.preview_digest,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -3599,7 +3625,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator',$3,'entity_resolution',$4,$5)
+            VALUES ($1,$2,$6,$3,'entity_resolution',$4,$5)
             ",
         )
         .bind(Uuid::now_v7())
@@ -3621,6 +3647,7 @@ impl PostgresStore {
             "evidence_mutated": false,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
 
@@ -5314,7 +5341,7 @@ impl PostgresStore {
             from_status,
             to_status: request.to_status,
             reason_code: request.reason_code,
-            actor: "local_operator".to_owned(),
+            actor: audit_actor(),
             previous_revision: current.1,
             new_revision: current.1 + 1,
             idempotency_key: request.idempotency_key,
@@ -6634,7 +6661,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,'local_operator','registry.sanction.updated','registry',$2,$3)
+            VALUES ($1,$4,'registry.sanction.updated','registry',$2,$3)
             ",
         )
         .bind(Uuid::now_v7())
@@ -6652,6 +6679,7 @@ impl PostgresStore {
             "model_ids": model_ids,
             "affected": affected
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -6821,12 +6849,15 @@ impl PostgresStore {
                 .execute(&mut *transaction)
                 .await?;
         }
+        let mut audit_entries_deleted = 0;
         if all || scopes.iter().any(|scope| scope == "audit_logs") {
-            sqlx::query("DELETE FROM audit_log WHERE $1::boolean OR at < $2")
-                .bind(before.is_none())
-                .bind(cutoff)
-                .execute(&mut *transaction)
-                .await?;
+            audit_entries_deleted =
+                sqlx::query("DELETE FROM audit_log WHERE $1::boolean OR at < $2")
+                    .bind(before.is_none())
+                    .bind(cutoff)
+                    .execute(&mut *transaction)
+                    .await?
+                    .rows_affected();
         }
         if all || scopes.iter().any(|scope| scope == "registry_sanctions") {
             sqlx::query("DELETE FROM tally_estate_reviews WHERE installation_id=$3 AND ($1::boolean OR updated_at < $2)")
@@ -6844,6 +6875,23 @@ impl PostgresStore {
             .bind(installation)
             .execute(&mut *transaction)
             .await?;
+        // Written after the deletions so a purge of the audit log still leaves this record.
+        sqlx::query(
+            r"
+            INSERT INTO audit_log (audit_id, actor, action, entity_type, entity_id, detail)
+            VALUES ($1,$2,'data.deleted','data',$3,$4)
+            ",
+        )
+        .bind(Uuid::now_v7())
+        .bind(audit_actor())
+        .bind(installation.to_string())
+        .bind(serde_json::json!({
+            "scopes": scopes,
+            "before": before,
+            "audit_entries_deleted": audit_entries_deleted,
+        }))
+        .execute(&mut *transaction)
+        .await?;
         transaction.commit().await?;
         self.data_inventory().await
     }
@@ -6993,7 +7041,7 @@ async fn put_scan_audit(
     sqlx::query(
         r"
         INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-        VALUES ($1,$2,'local_operator',$3,'scan',$4,$5)
+        VALUES ($1,$2,$6,$3,'scan',$4,$5)
         ",
     )
     .bind(Uuid::now_v7())
@@ -7001,6 +7049,7 @@ async fn put_scan_audit(
     .bind(action)
     .bind(scan_id.to_string())
     .bind(detail)
+    .bind(audit_actor())
     .execute(&mut **transaction)
     .await?;
     Ok(())

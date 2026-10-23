@@ -249,7 +249,10 @@ sensitive data**: deploy and grant access accordingly.
 
 - AI logs expire after **90 days by default**; durable inventory survives log expiration.
 - Connector credentials are encrypted at rest with the installation's `TALLY_SECRET_KEY`.
-- Standalone access requires sign-in. The first account is an administrator; subsequent users need an invitation.
+- Standalone access requires sign-in. The first account is an administrator; subsequent users need an invitation, which grants the Member or Administrator role. Tally always keeps at least one enabled administrator.
+- Passwords are 12 to 1,024 characters and may not be common, use fewer than four distinct characters, or contain the account's email address. Sessions last 12 hours. Invitations last 7 days and reset links one hour.
+- Sign-in is throttled per client address: five failures for one email pause that client for 15 minutes, and credential endpoints allow 20 requests a minute per client. An account locks for 15 minutes only after 50 consecutive failures from any source.
+- The audit log records the signed-in user for account changes, sign-ins, connector, registry, scan and data operations, including deletion of the audit log itself.
 - Administrators can preview and delete selected data categories or all operational data. Accounts, installation identity, and the built-in catalog are preserved.
 
 Read the [privacy and storage model](https://godel-labs.ai/docs/tally/privacy-and-data) and [security policy](SECURITY.md).

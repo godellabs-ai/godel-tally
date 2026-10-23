@@ -132,6 +132,11 @@ pub(crate) fn kubernetes_api_base(value: &str) -> Result<Url> {
     let mut url = Url::parse(value).context("invalid Kubernetes API URL reference")?;
     ensure!(url.scheme() == "https", "Kubernetes API must use HTTPS");
     ensure!(
+        !url.host_str()
+            .is_some_and(tally_connectors::forbidden_destination_host),
+        "Kubernetes API URL points at a link-local or instance-metadata address"
+    );
+    ensure!(
         url.username().is_empty() && url.password().is_none(),
         "Kubernetes API URL cannot contain credentials"
     );

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Throttle sign-in per client address instead of locking accounts after five failures. Five failed attempts for one email pause only the client that made them for 15 minutes, and 30 failures across emails pause that client entirely, so a stranger can no longer lock somebody else out. Credential endpoints also share a per-client budget of 20 requests a minute and answer `429` with `Retry-After`. The account-wide lock remains as a backstop after 50 consecutive failures.
+- Make every sign-in attempt cost one password verification, so response time no longer reveals whether an account exists or is locked.
+- Refuse passwords made of fewer than four distinct characters, common passwords, and passwords containing the account's email address. Length limits count characters, as the message says.
+- Invitations choose a role, Member or Administrator, and administrators can change a user's role. Tally refuses to demote or disable the last enabled administrator. Administrators can list pending invitations and revoke them, and re-inviting an address revokes its earlier link.
+- Record the signed-in user as the actor on audit entries instead of `local_operator`. Sign-ins, account lockouts, registrations, invitations, role, name, password and reset-link changes, user enable and disable, email settings and data deletions are now audited. Deleting audit logs leaves a record of the deletion.
+- Check the session and role on account routes before reading the request body, so anonymous callers no longer see request formats.
+- Send `Content-Security-Policy`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy` on every response, and HSTS for HTTPS origins with a real host name.
+- Refuse connector URLs that point at link-local or instance-metadata addresses. Private and loopback addresses remain allowed for self-hosted sources.
+- Serve the console's "page not found" page for unknown URLs instead of an empty response.
+- Return to sign-in when a session ends while the console is open, then back to the same page. Pages a member cannot open say that administrator access is required instead of suggesting a connection problem.
+- Fix updating a running macOS installation: the installer now waits for launchd to remove the previous service before starting the new one, instead of leaving Tally stopped.
+- Stop ClickHouse logging DNS errors when the machine's host name does not resolve; existing installations are updated on the next installer run.
+- Return `422 import_empty` for an empty import instead of `413`.
+- Accessibility: name the Registry selection checkboxes, return focus to the control that opened a dialog, raise the active Connectors badge contrast to WCAG AA, fix the Connectors heading order, label the invitation email field, and use 12px minimum text in the Overview diagram.
+- Say in standalone Registry copy that decisions are recorded, not enforced. Stop polling authentication status on the sign-in page once it has loaded.
+- Update Next.js to 16.4.2 and `ctutils` to 0.4.5 (RUSTSEC-2026-0385).
+
 ## [0.1.4] - 2026-10-23
 
 - Run the Tally image from `scratch` with a static musl binary and a CA bundle. Certificate generation, supplied-certificate validation, privilege dropping, and readiness checks are built into `tallyd`; no shell, curl, or OpenSSL is needed in the image. Existing data volumes and certificates are reused.

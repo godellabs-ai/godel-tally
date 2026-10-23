@@ -17,6 +17,9 @@ async function read<T>(path: string, signal?: AbortSignal): Promise<T> {
     if (signal?.aborted) throw signal.reason;
     throw new UsersApiError("Tally is reconnecting. Retrying automatically.", 0);
   }
+  if (response.status === 401 && typeof window !== "undefined" && !window.localStorage.getItem("auth_token")) {
+    window.location.assign(new URL(`/signin?next=${encodeURIComponent(window.location.pathname)}`, window.location.origin).href);
+  }
   if (!response.ok) {
     const message = response.status === 401 ? "Sign in to view console users."
       : response.status === 403 ? "Administrator access is required."
@@ -33,4 +36,10 @@ export async function loadUsers(signal?: AbortSignal) {
     read<{ users: User[] }>("users", signal), read<{ user: { id: string } }>("me", signal),
   ]);
   return { users: people.users, currentUserId: me.user.id };
+}
+
+export type Invitation = { id: string; email: string; role: "admin" | "member"; invited_by: string | null; created_at: string; expires_at: string };
+
+export async function loadInvitations(signal?: AbortSignal) {
+  return (await read<{ invitations: Invitation[] }>("invitations", signal)).invitations;
 }

@@ -1,18 +1,21 @@
 //! Standalone Tally IAM: password accounts, invitations, password resets and the
 //! session check for the Tally API. Gate embeds `tally_api::routes` under its own IAM.
-use std::sync::{Arc, OnceLock};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{Arc, OnceLock},
+};
 
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use axum::{
-    Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    Extension, Json, Router,
+    extract::{ConnectInfo, Path, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -29,12 +32,54 @@ pub struct AuthState {
     pub collector_import_token: String,
     pub cipher: SecretCipher,
     pub http: reqwest::Client,
+    pub throttle: Arc<crate::throttle::Throttle>,
 }
 
 type ApiResult<T> = Result<T, (StatusCode, Json<serde_json::Value>)>;
 
 fn error(status: StatusCode, message: &str) -> (StatusCode, Json<serde_json::Value>) {
     (status, Json(serde_json::json!({ "error": message })))
+}
+
+/// The address the request arrived from, attached by [`auth_gate`]. In-process callers
+/// without a socket address share the unspecified address.
+#[derive(Clone, Copy)]
+pub(crate) struct ClientIp(pub IpAddr);
+
+fn client_ip(request: &axum::extract::Request) -> IpAddr {
+    request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |info| info.0.ip())
+}
+
+fn too_many_attempts(wait: std::time::Duration) -> (StatusCode, Json<serde_json::Value>) {
+    let minutes = wait.as_secs().div_ceil(60).max(1);
+    let unit = if minutes == 1 { "minute" } else { "minutes" };
+    error(
+        StatusCode::TOO_MANY_REQUESTS,
+        &format!("Too many attempts. Try again in {minutes} {unit}."),
+    )
+}
+
+/// Records an account or access-control change in the audit log shown on the Audit page.
+async fn audit<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    actor: &str,
+    action: &str,
+    entity_id: impl ToString,
+    detail: serde_json::Value,
+) -> ApiResult<()> {
+    sqlx::query("INSERT INTO audit_log (audit_id, actor, action, entity_type, entity_id, detail) VALUES ($1,$2,$3,'account',$4,$5)")
+        .bind(Uuid::now_v7())
+        .bind(actor)
+        .bind(action)
+        .bind(entity_id.to_string())
+        .bind(detail)
+        .execute(executor)
+        .await
+        .map_err(db_error)?;
+    Ok(())
 }
 
 fn request_origin(headers: &HeaderMap) -> ApiResult<String> {
@@ -117,8 +162,100 @@ fn normalize_email(email: &str) -> ApiResult<String> {
     Ok(email)
 }
 
+/// Frequently used passwords long enough to pass the length rule.
+const COMMON_PASSWORDS: &[&str] = &[
+    "passwordpassword",
+    "password1234",
+    "password12345",
+    "password123456",
+    "password1234567",
+    "passw0rdpassw0rd",
+    "p@ssw0rd1234",
+    "p@ssword1234",
+    "123456789012",
+    "1234567890123",
+    "12345678901234",
+    "123456789abc",
+    "abc123456789",
+    "abcdefghijkl",
+    "abcd1234abcd",
+    "qwertyuiopas",
+    "qwertyuiop12",
+    "qwerty123456",
+    "qwertyqwerty",
+    "1q2w3e4r5t6y",
+    "1qaz2wsx3edc",
+    "qazwsxedcrfv",
+    "zaq12wsxcde3",
+    "asdfghjklasd",
+    "iloveyou1234",
+    "iloveyouiloveyou",
+    "administrator",
+    "administrator1",
+    "adminadminadmin",
+    "admin1234567",
+    "welcome12345",
+    "welcome123456",
+    "changeme1234",
+    "changemenow!",
+    "letmein12345",
+    "trustno1trustno1",
+    "football1234",
+    "baseball1234",
+    "superman1234",
+    "monkey123456",
+    "dragon123456",
+    "sunshine1234",
+    "princess1234",
+    "master123456",
+    "shadow123456",
+    "starwars1234",
+    "computer1234",
+    "internet1234",
+    "tallytally12",
+    "tallytallytally",
+    "godeltally123",
+    "godeltally1234",
+];
+
+/// Rejects passwords that meet the length rule but are trivially guessable.
+fn validate_password(password: &str, email: &str) -> ApiResult<()> {
+    let length = password.chars().count();
+    if !(12..=1024).contains(&length) || password.len() > 4096 {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Password must be 12 to 1024 characters",
+        ));
+    }
+    let lowered = password.to_lowercase();
+    let mut distinct: Vec<char> = lowered.chars().filter(|c| !c.is_whitespace()).collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    if distinct.len() < 4 {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Password must use at least 4 different characters",
+        ));
+    }
+    if COMMON_PASSWORDS.contains(&lowered.as_str()) {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "This password is too common. Choose a less predictable one",
+        ));
+    }
+    let email = email.to_lowercase();
+    let local = email.split('@').next().unwrap_or_default();
+    if lowered.contains(&email) || (local.chars().count() >= 4 && lowered.contains(local)) {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Password must not contain your email address",
+        ));
+    }
+    Ok(())
+}
+
 fn hash_password(password: &str) -> ApiResult<String> {
-    if password.len() < 12 || password.len() > 1024 {
+    if !(12..=1024).contains(&password.chars().count()) || password.len() > 4096 {
         return Err(error(
             StatusCode::BAD_REQUEST,
             "Password must be 12 to 1024 characters",
@@ -207,8 +344,11 @@ async fn load_user(pool: &PgPool, email: &str) -> ApiResult<Option<UserRecord>> 
     }))
 }
 
-/// Five consecutive failures lock the account for 15 minutes. Attempts during a lock
-/// neither count nor extend it, and the count restarts once a lock has expired.
+/// Per-client throttling ([`crate::throttle`]) stops ordinary guessing without letting a
+/// stranger lock somebody out. This account-wide lock is the backstop against guessing
+/// spread across many addresses: fifty consecutive failures lock the account for 15
+/// minutes. Attempts during a lock neither count nor extend it, and the count restarts
+/// once a lock has expired. Returns whether this failure started a lock.
 const RECORD_FAILED_ATTEMPT: &str = "UPDATE tally_auth_users SET
     failed_attempts = CASE
         WHEN locked_until > NOW() THEN failed_attempts
@@ -216,9 +356,10 @@ const RECORD_FAILED_ATTEMPT: &str = "UPDATE tally_auth_users SET
         ELSE failed_attempts + 1 END,
     locked_until = CASE
         WHEN locked_until > NOW() THEN locked_until
-        WHEN locked_until IS NULL AND failed_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes'
+        WHEN locked_until IS NULL AND failed_attempts + 1 >= 50 THEN NOW() + INTERVAL '15 minutes'
         ELSE NULL END
-    WHERE user_id = $1";
+    WHERE user_id = $1
+    RETURNING locked_until > NOW() AND failed_attempts >= 50";
 
 fn session_from_headers(headers: &HeaderMap) -> Option<String> {
     // HTTP/2 can split Cookie into multiple fields (RFC 9113 section 8.2.3).
@@ -381,6 +522,7 @@ async fn register_account(state: &AuthState, input: RegisterInput) -> ApiResult<
     let email = normalize_email(&input.email)?;
     let (first_name, last_name) = validated_names(&input.first_name, &input.last_name)?;
     let name = format!("{first_name} {last_name}");
+    validate_password(&input.password, &email)?;
     let hashed = password_hash(input.password).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     // Serialize first-user registration across API replicas. Only the first user is an admin.
@@ -393,23 +535,27 @@ async fn register_account(state: &AuthState, input: RegisterInput) -> ApiResult<
         .await
         .map_err(db_error)?;
     let role = if count == 0 {
-        "admin"
+        "admin".to_owned()
     } else {
         let invite = input
             .invitation_token
             .as_deref()
             .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
             .ok_or_else(|| error(StatusCode::FORBIDDEN, "An invitation is required"))?;
-        let invited_email: Option<String> = sqlx::query_scalar("UPDATE tally_auth_invitations SET accepted_at = NOW() WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > NOW() RETURNING email")
+        // A mismatched email rolls this transaction back, so the invitation stays usable.
+        let invited: Option<(String, String)> = sqlx::query_as("UPDATE tally_auth_invitations SET accepted_at = NOW() WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW() RETURNING email, role")
             .bind(token_hash(invite)).fetch_optional(&mut *tx).await.map_err(db_error)?;
-        if invited_email.as_deref() != Some(email.as_str()) {
-            return Err(error(
-                StatusCode::FORBIDDEN,
-                "Invitation is invalid or expired",
-            ));
+        match invited {
+            Some((invited_email, role)) if invited_email == email => role,
+            _ => {
+                return Err(error(
+                    StatusCode::FORBIDDEN,
+                    "Invitation is invalid or expired",
+                ));
+            }
         }
-        "member"
     };
+    let role = role.as_str();
     let id = Uuid::new_v4();
     let inserted = sqlx::query("INSERT INTO tally_auth_users (user_id, email, display_name, first_name, last_name, password_hash, role) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (email) DO NOTHING")
         .bind(id).bind(&email).bind(&name).bind(first_name).bind(last_name).bind(hashed).bind(role)
@@ -417,6 +563,14 @@ async fn register_account(state: &AuthState, input: RegisterInput) -> ApiResult<
     if inserted.rows_affected() != 1 {
         return Err(error(StatusCode::CONFLICT, "Email already registered"));
     }
+    audit(
+        &mut *tx,
+        &email,
+        "auth.user.registered",
+        id,
+        serde_json::json!({ "email": email, "role": role, "first_user": count == 0 }),
+    )
+    .await?;
     let response = issue_session(
         &mut tx,
         UserView {
@@ -441,43 +595,59 @@ struct LoginInput {
 
 async fn login(
     State(state): State<Arc<AuthState>>,
+    Extension(ClientIp(client)): Extension<ClientIp>,
     headers: HeaderMap,
     input: Result<Json<LoginInput>, JsonRejection>,
 ) -> Response {
     replacing_session(&state, &headers, async {
         let Json(input) =
             input.map_err(|_| error(StatusCode::BAD_REQUEST, "Invalid sign-in request"))?;
-        sign_in(&state, input).await
+        sign_in(&state, client, input).await
     })
     .await
 }
 
-async fn sign_in(state: &AuthState, input: LoginInput) -> ApiResult<Response> {
+async fn sign_in(state: &AuthState, client: IpAddr, input: LoginInput) -> ApiResult<Response> {
     let email = normalize_email(&input.email)?;
+    if let Some(wait) = state.throttle.sign_in_paused(client, &email) {
+        return Err(too_many_attempts(wait));
+    }
     let user = load_user(&state.pool, &email).await?;
-    let valid = if let Some(record) = &user {
-        if record.locked_until.is_some_and(|until| until > Utc::now()) {
-            false
-        } else if let Some(hash) = &record.password_hash {
-            check_password(input.password, hash.clone()).await
-        } else {
-            false
-        }
-    } else {
-        // Keep unknown-email attempts expensive too.
-        let _ = check_password(input.password, dummy_hash().to_owned()).await;
-        false
-    };
-    if !valid {
+    // Unknown, locked and password-less accounts verify against a dummy hash, so every
+    // attempt costs one Argon2 verification and timing reveals nothing about the account.
+    let stored_hash = user
+        .as_ref()
+        .filter(|record| record.locked_until.is_none_or(|until| until <= Utc::now()))
+        .and_then(|record| record.password_hash.clone());
+    let verified = check_password(
+        input.password,
+        stored_hash
+            .clone()
+            .unwrap_or_else(|| dummy_hash().to_owned()),
+    )
+    .await;
+    if !(verified && stored_hash.is_some()) {
+        state.throttle.record_failure(client, &email);
         if let Some(record) = user {
-            sqlx::query(RECORD_FAILED_ATTEMPT)
+            let locked: Option<bool> = sqlx::query_scalar(RECORD_FAILED_ATTEMPT)
                 .bind(record.view.id)
-                .execute(&state.pool)
+                .fetch_optional(&state.pool)
                 .await
                 .map_err(db_error)?;
+            if locked == Some(true) && record.locked_until.is_none_or(|until| until <= Utc::now()) {
+                audit(
+                    &state.pool,
+                    "system",
+                    "auth.account.locked",
+                    record.view.id,
+                    serde_json::json!({ "email": record.view.email, "minutes": 15 }),
+                )
+                .await?;
+            }
         }
         return Err(error(StatusCode::UNAUTHORIZED, "Invalid credentials"));
     }
+    state.throttle.record_success(client, &email);
     let record = user.expect("valid password implies user exists");
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     // Lock and recheck the credential before issuing the session. A concurrent reset
@@ -495,6 +665,14 @@ async fn sign_in(state: &AuthState, input: LoginInput) -> ApiResult<Response> {
     if updated.rows_affected() != 1 {
         return Err(error(StatusCode::UNAUTHORIZED, "Invalid credentials"));
     }
+    audit(
+        &mut *tx,
+        &record.view.email,
+        "auth.signed_in",
+        record.view.id,
+        serde_json::json!({ "client": client.to_string() }),
+    )
+    .await?;
     let response = issue_session(&mut tx, record.view).await?;
     tx.commit().await.map_err(db_error)?;
     Ok(response)
@@ -591,6 +769,7 @@ async fn change_password(
             "Choose a different password",
         ));
     }
+    validate_password(&input.new_password, &actor.email)?;
     let new_hash = password_hash(input.new_password).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let updated = sqlx::query("UPDATE tally_auth_users SET password_hash = $2, failed_attempts = 0, locked_until = NULL WHERE user_id = $1 AND password_hash = $3")
@@ -614,6 +793,14 @@ async fn change_password(
         .execute(&mut *tx)
         .await
         .map_err(db_error)?;
+    audit(
+        &mut *tx,
+        &actor.email,
+        "auth.password.changed",
+        actor.id,
+        serde_json::json!({ "other_sessions_revoked": true }),
+    )
+    .await?;
     tx.commit().await.map_err(db_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -634,6 +821,18 @@ async fn confirm_password_reset(
             "Reset link is invalid or expired",
         ));
     }
+    // The password rules need the account's email; the token is rechecked under lock below.
+    let email: String = sqlx::query_scalar(
+        "SELECT u.email FROM tally_auth_users u JOIN tally_auth_password_resets r
+         ON r.user_id = u.user_id
+         WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > NOW()",
+    )
+    .bind(token_hash(&input.token))
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(db_error)?
+    .ok_or_else(|| error(StatusCode::BAD_REQUEST, "Reset link is invalid or expired"))?;
+    validate_password(&input.new_password, &email)?;
     let new_hash = password_hash(input.new_password).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     // All reset flows lock the user before changing tokens, avoiding lock-order
@@ -669,6 +868,14 @@ async fn confirm_password_reset(
         .execute(&mut *tx)
         .await
         .map_err(db_error)?;
+    audit(
+        &mut *tx,
+        &email,
+        "auth.password.reset",
+        user_id,
+        serde_json::json!({ "sessions_revoked": true }),
+    )
+    .await?;
     tx.commit().await.map_err(db_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -803,6 +1010,14 @@ async fn save_email_settings(
                 )
             }
         })?;
+    audit(
+        &state.pool,
+        &actor.email,
+        "auth.email_settings.updated",
+        "email",
+        serde_json::json!({}),
+    )
+    .await?;
     email_settings(State(state), headers).await
 }
 
@@ -859,6 +1074,19 @@ async fn logout(State(state): State<Arc<AuthState>>, headers: HeaderMap) -> ApiR
 #[derive(Deserialize)]
 struct InviteInput {
     email: String,
+    #[serde(default)]
+    role: Option<String>,
+}
+
+fn validated_role(role: Option<&str>) -> ApiResult<&'static str> {
+    match role.unwrap_or("member") {
+        "member" => Ok("member"),
+        "admin" => Ok("admin"),
+        _ => Err(error(
+            StatusCode::BAD_REQUEST,
+            "Role must be admin or member",
+        )),
+    }
 }
 
 async fn invite(
@@ -868,16 +1096,70 @@ async fn invite(
 ) -> ApiResult<Json<serde_json::Value>> {
     let actor = admin(&state, &headers).await?;
     let email = normalize_email(&input.email)?;
+    let role = validated_role(input.role.as_deref())?;
     if load_user(&state.pool, &email).await?.is_some() {
         return Err(error(StatusCode::CONFLICT, "User already registered"));
     }
     let token = random_token()?;
-    sqlx::query("INSERT INTO tally_auth_invitations (token_hash, email, invited_by, expires_at) VALUES ($1,$2,$3,NOW() + INTERVAL '7 days')")
-        .bind(token_hash(&token)).bind(&email).bind(actor.id)
-        .execute(&state.pool).await.map_err(db_error)?;
+    let mut tx = state.pool.begin().await.map_err(db_error)?;
+    // Only the newest link for an address works, so a mistaken earlier link can be replaced.
+    sqlx::query("UPDATE tally_auth_invitations SET revoked_at = NOW() WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL")
+        .bind(&email).execute(&mut *tx).await.map_err(db_error)?;
+    let (invitation_id, expires_at): (Uuid, chrono::DateTime<Utc>) = sqlx::query_as("INSERT INTO tally_auth_invitations (token_hash, email, invited_by, role, expires_at) VALUES ($1,$2,$3,$4,NOW() + INTERVAL '7 days') RETURNING invitation_id, expires_at")
+        .bind(token_hash(&token)).bind(&email).bind(actor.id).bind(role)
+        .fetch_one(&mut *tx).await.map_err(db_error)?;
+    audit(
+        &mut *tx,
+        &actor.email,
+        "auth.invitation.created",
+        invitation_id,
+        serde_json::json!({ "email": email, "role": role }),
+    )
+    .await?;
+    tx.commit().await.map_err(db_error)?;
     Ok(Json(
-        serde_json::json!({ "email": email, "invite_url": format!("{}/signin#invite={token}", request_origin(&headers)?), "expires_at": Utc::now() + Duration::days(7) }),
+        serde_json::json!({ "id": invitation_id, "email": email, "role": role, "invite_url": format!("{}/signin#invite={token}", request_origin(&headers)?), "expires_at": expires_at }),
     ))
+}
+
+async fn invitations(
+    State(state): State<Arc<AuthState>>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    admin(&state, &headers).await?;
+    let rows = sqlx::query("SELECT i.invitation_id, i.email, i.role, i.created_at, i.expires_at, u.email AS invited_by FROM tally_auth_invitations i LEFT JOIN tally_auth_users u ON u.user_id = i.invited_by WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > NOW() ORDER BY i.created_at DESC")
+        .fetch_all(&state.pool).await.map_err(db_error)?;
+    Ok(Json(
+        serde_json::json!({ "invitations": rows.iter().map(|row| serde_json::json!({
+        "id": row.get::<Uuid, _>("invitation_id"), "email": row.get::<String, _>("email"),
+        "role": row.get::<String, _>("role"),
+        "invited_by": row.get::<Option<String>, _>("invited_by"),
+        "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at"),
+        "expires_at": row.get::<chrono::DateTime<Utc>, _>("expires_at"),
+    })).collect::<Vec<_>>() }),
+    ))
+}
+
+async fn revoke_invitation(
+    State(state): State<Arc<AuthState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    let actor = admin(&state, &headers).await?;
+    let mut tx = state.pool.begin().await.map_err(db_error)?;
+    let email: Option<String> = sqlx::query_scalar("UPDATE tally_auth_invitations SET revoked_at = NOW() WHERE invitation_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL RETURNING email")
+        .bind(id).fetch_optional(&mut *tx).await.map_err(db_error)?;
+    let email = email.ok_or_else(|| error(StatusCode::NOT_FOUND, "Invitation not found"))?;
+    audit(
+        &mut *tx,
+        &actor.email,
+        "auth.invitation.revoked",
+        id,
+        serde_json::json!({ "email": email }),
+    )
+    .await?;
+    tx.commit().await.map_err(db_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn users(
@@ -904,21 +1186,90 @@ struct UserUpdate {
     disabled: bool,
 }
 
+#[derive(Deserialize)]
+struct RoleUpdate {
+    role: String,
+}
+
+/// Locks every enabled administrator row and refuses a change that would leave none.
+async fn ensure_another_admin(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user: Uuid,
+) -> ApiResult<()> {
+    let admins: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM tally_auth_users WHERE role = 'admin' AND disabled_at IS NULL FOR UPDATE",
+    )
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(db_error)?;
+    if admins.iter().all(|admin| *admin == user) {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Tally needs at least one enabled administrator",
+        ));
+    }
+    Ok(())
+}
+
+async fn update_user_role(
+    State(state): State<Arc<AuthState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RoleUpdate>,
+) -> ApiResult<StatusCode> {
+    let actor = admin(&state, &headers).await?;
+    let role = validated_role(Some(&input.role))?;
+    let mut tx = state.pool.begin().await.map_err(db_error)?;
+    if role == "member" {
+        ensure_another_admin(&mut tx, id).await?;
+    }
+    let previous: Option<String> = sqlx::query_scalar(
+        "UPDATE tally_auth_users u SET role = $2 FROM tally_auth_users old
+         WHERE u.user_id = $1 AND old.user_id = u.user_id RETURNING old.role",
+    )
+    .bind(id)
+    .bind(role)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    let previous = previous.ok_or_else(|| error(StatusCode::NOT_FOUND, "User not found"))?;
+    if previous != role {
+        audit(
+            &mut *tx,
+            &actor.email,
+            "auth.user.role_changed",
+            id,
+            serde_json::json!({ "from": previous, "to": role }),
+        )
+        .await?;
+    }
+    tx.commit().await.map_err(db_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn update_user_name(
     State(state): State<Arc<AuthState>>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<ProfileInput>,
 ) -> ApiResult<StatusCode> {
-    admin(&state, &headers).await?;
+    let actor = admin(&state, &headers).await?;
     let (first_name, last_name) = validated_names(&input.first_name, &input.last_name)?;
     let display_name = format!("{first_name} {last_name}");
     let updated = sqlx::query("UPDATE tally_auth_users SET first_name = $2, last_name = $3, display_name = $4 WHERE user_id = $1")
-        .bind(id).bind(first_name).bind(last_name).bind(display_name)
+        .bind(id).bind(first_name).bind(last_name).bind(&display_name)
         .execute(&state.pool).await.map_err(db_error)?;
     if updated.rows_affected() != 1 {
         return Err(error(StatusCode::NOT_FOUND, "User not found"));
     }
+    audit(
+        &state.pool,
+        &actor.email,
+        "auth.user.renamed",
+        id,
+        serde_json::json!({ "display_name": display_name }),
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -927,7 +1278,7 @@ async fn admin_reset_password(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    admin(&state, &headers).await?;
+    let actor = admin(&state, &headers).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let row = sqlx::query(
         "SELECT email, disabled_at FROM tally_auth_users WHERE user_id = $1 FOR UPDATE",
@@ -946,6 +1297,14 @@ async fn admin_reset_password(
         ));
     }
     let (token, expires_at) = new_reset_token(&mut tx, id).await?;
+    audit(
+        &mut *tx,
+        &actor.email,
+        "auth.password_reset_link.issued",
+        id,
+        serde_json::json!({ "email": email }),
+    )
+    .await?;
     tx.commit().await.map_err(db_error)?;
     let reset_url = format!(
         "{}/reset-password#token={token}",
@@ -992,16 +1351,33 @@ async fn update_user(
             "Cannot disable your own account",
         ));
     }
+    let mut tx = state.pool.begin().await.map_err(db_error)?;
+    if input.disabled {
+        ensure_another_admin(&mut tx, id).await?;
+    }
     let updated = sqlx::query("UPDATE tally_auth_users SET disabled_at = CASE WHEN $2 THEN NOW() ELSE NULL END WHERE user_id = $1")
-        .bind(id).bind(input.disabled).execute(&state.pool).await.map_err(db_error)?;
+        .bind(id).bind(input.disabled).execute(&mut *tx).await.map_err(db_error)?;
     if updated.rows_affected() == 0 {
         return Err(error(StatusCode::NOT_FOUND, "User not found"));
     }
     sqlx::query("DELETE FROM tally_auth_sessions WHERE user_id = $1")
         .bind(id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(db_error)?;
+    audit(
+        &mut *tx,
+        &actor.email,
+        if input.disabled {
+            "auth.user.disabled"
+        } else {
+            "auth.user.enabled"
+        },
+        id,
+        serde_json::json!({ "sessions_revoked": true }),
+    )
+    .await?;
+    tx.commit().await.map_err(db_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1023,7 +1399,8 @@ pub async fn require_session(
         request.headers(),
         &state.collector_import_token,
     ) {
-        return next.run(request).await;
+        return tally_store_postgres::with_audit_actor("collector".to_owned(), next.run(request))
+            .await;
     }
     if !matches!(
         *request.method(),
@@ -1036,7 +1413,7 @@ pub async fn require_session(
         Ok(user) if user.role != "admin" && admin_only(request.method(), path) => {
             error(StatusCode::FORBIDDEN, "Administrator access required").into_response()
         }
-        Ok(_) => next.run(request).await,
+        Ok(user) => tally_store_postgres::with_audit_actor(user.email, next.run(request)).await,
         Err(e) => e.into_response(),
     };
     response
@@ -1096,6 +1473,82 @@ pub(crate) async fn require_origin(request: axum::extract::Request, next: Next) 
     response
 }
 
+/// Who may call an account route. The gate checks this before a handler parses its body,
+/// so anonymous callers learn nothing about request shapes.
+#[derive(PartialEq)]
+enum AuthAccess {
+    Public,
+    Session,
+    Admin,
+}
+
+fn auth_access(path: &str) -> AuthAccess {
+    match path {
+        "/api/v1/auth/status"
+        | "/api/v1/auth/register"
+        | "/api/v1/auth/login"
+        | "/api/v1/auth/logout"
+        | "/api/v1/auth/password-reset/request"
+        | "/api/v1/auth/password-reset/confirm" => AuthAccess::Public,
+        "/api/v1/auth/me" | "/api/v1/auth/me/password" => AuthAccess::Session,
+        _ => AuthAccess::Admin,
+    }
+}
+
+/// Routes that check a credential or send mail; each request spends from the client's budget.
+fn credential_route(method: &Method, path: &str) -> bool {
+    *method == Method::POST
+        && matches!(
+            path,
+            "/api/v1/auth/register"
+                | "/api/v1/auth/login"
+                | "/api/v1/auth/me/password"
+                | "/api/v1/auth/password-reset/request"
+                | "/api/v1/auth/password-reset/confirm"
+        )
+}
+
+pub(crate) async fn auth_gate(
+    State(state): State<Arc<AuthState>>,
+    mut request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    if !matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) && !valid_request_origin(request.headers())
+    {
+        return error(StatusCode::FORBIDDEN, "Invalid request origin").into_response();
+    }
+    let client = client_ip(&request);
+    if credential_route(request.method(), request.uri().path())
+        && let Err(wait) = state.throttle.admit(client)
+    {
+        let mut response = too_many_attempts(wait).into_response();
+        if let Ok(value) = HeaderValue::from_str(&wait.as_secs().to_string()) {
+            response.headers_mut().insert(header::RETRY_AFTER, value);
+        }
+        return response;
+    }
+    let access = auth_access(request.uri().path());
+    if access != AuthAccess::Public {
+        match current_user(&state, request.headers()).await {
+            Ok(user) if access == AuthAccess::Admin && user.role != "admin" => {
+                return error(StatusCode::FORBIDDEN, "Administrator access required")
+                    .into_response();
+            }
+            Ok(_) => {}
+            Err(e) => return e.into_response(),
+        }
+    }
+    request.extensions_mut().insert(ClientIp(client));
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
 pub fn router(state: Arc<AuthState>) -> Router {
     Router::new()
         .route("/api/v1/auth/status", get(status))
@@ -1124,9 +1577,11 @@ pub fn router(state: Arc<AuthState>) -> Router {
             "/api/v1/auth/users/{id}/password-reset",
             post(admin_reset_password),
         )
-        .route("/api/v1/auth/invitations", post(invite))
-        .with_state(state)
-        .layer(axum::middleware::from_fn(require_origin))
+        .route("/api/v1/auth/users/{id}/role", post(update_user_role))
+        .route("/api/v1/auth/invitations", get(invitations).post(invite))
+        .route("/api/v1/auth/invitations/{id}", delete(revoke_invitation))
+        .with_state(state.clone())
+        .layer(axum::middleware::from_fn_with_state(state, auth_gate))
 }
 
 #[cfg(test)]

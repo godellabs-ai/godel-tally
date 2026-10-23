@@ -272,7 +272,7 @@ export function ConnectorsHub({
                 >
                   <Icon className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
                   {category.label}
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground transition-colors group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground">
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground transition-colors group-data-[state=active]:bg-primary-foreground group-data-[state=active]:text-primary">
                     {count}
                   </span>
                 </TabsTrigger>
@@ -289,7 +289,7 @@ export function ConnectorsHub({
                 className={cn("space-y-5", embedded ? "mt-0" : "mt-5")}
               >
                 {!embedded ? <div>
-                  <h3 className="text-sm font-bold text-foreground">{category.label}</h3>
+                  <h2 className="text-sm font-bold text-foreground">{category.label}</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">{category.description}</p>
                 </div> : null}
 

@@ -76,12 +76,15 @@ export function RegistryWorkspace({
   canWrite = true,
   onChanged,
   extensions = [],
+  enforcementAvailable = false,
 }: {
   initialProviders: RegistryProvider[];
   initialModels: RegistryModel[];
   /** Reviewed hostnames, keyed by provider key. */
   providerDomains?: Record<string, string[]>;
   canWrite?: boolean;
+  /** Set by hosts such as Gödel Gate that can block requests; standalone Tally only records decisions. */
+  enforcementAvailable?: boolean;
   onChanged?: () => void;
   /** Host-owned registry sections. Standalone Tally supplies none. */
   extensions?: RegistryWorkspaceExtension[];
@@ -422,16 +425,24 @@ export function RegistryWorkspace({
           <TabsContent value={tab} className="mt-4">
             {providerDomains ? (
               <p role="note" className="mb-3 rounded-lg border border-border bg-muted/25 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-                These providers have reviewed AI service domains. A provider decision classifies
-                matching Tally findings; an active runtime policy can block identified requests.
-                Domain blocking requires an enabled enforcement connector and covers the mapped
-                domains shown below. Some regional or app-embedded endpoints may need additional mappings.
+                {enforcementAvailable ? <>
+                  These providers have reviewed AI service domains. A provider decision classifies
+                  matching Tally findings; an active runtime policy can block identified requests.
+                  Domain blocking requires an enabled enforcement connector and covers the mapped
+                  domains shown below. Some regional or app-embedded endpoints may need additional mappings.
+                </> : <>
+                  These providers have reviewed AI service domains. A provider decision classifies
+                  matching Tally findings as sanctioned or unsanctioned. Tally records the decision;
+                  it does not block traffic. Some regional or app-embedded endpoints may need
+                  additional mappings.
+                </>}
               </p>
             ) : null}
             <CustomTable
               data={paginatedProviders}
               columns={providerColumns}
               keyExtractor={(p) => p.provider_id}
+              selectionLabel={(p) => `Select ${p.name}`}
               selectedKeys={canWrite ? selected : undefined}
               onSelectionChange={canWrite ? setSelected : undefined}
               searchPlaceholder="Search providers by name or domain..."
@@ -520,6 +531,7 @@ export function RegistryWorkspace({
             data={paginatedModels}
             columns={modelColumns}
             keyExtractor={(m) => m.model_id}
+            selectionLabel={(m) => `Select ${m.name}`}
             selectedKeys={canWrite ? selected : undefined}
             onSelectionChange={canWrite ? setSelected : undefined}
             searchPlaceholder="Search models by name, family, key, or provider..."

@@ -23,6 +23,7 @@ mod gate_rekey;
 mod host;
 mod runtime_control;
 mod supervisor;
+mod throttle;
 mod ui;
 
 fn main() -> Result<()> {
@@ -208,6 +209,7 @@ async fn init_auth(
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .context("create email HTTP client")?,
+        throttle: Arc::default(),
     }))
 }
 
@@ -228,17 +230,64 @@ fn public_origin_at(app: Router, public_url: &str) -> Result<Router> {
     let public_host =
         HeaderValue::from_str(&public[url::Position::BeforeHost..url::Position::AfterPort])?;
     let public_proto = HeaderValue::from_str(public.scheme())?;
-    Ok(app.layer(axum::middleware::from_fn(
-        move |mut request: Request, next: Next| {
-            request
-                .headers_mut()
-                .insert("x-forwarded-host", public_host.clone());
-            request
-                .headers_mut()
-                .insert("x-forwarded-proto", public_proto.clone());
-            async move { next.run(request).await }
-        },
-    )))
+    // HSTS would pin every service on a shared name such as localhost to HTTPS, so it is
+    // only sent for a real host name served over HTTPS.
+    let hsts = public.scheme() == "https"
+        && public.domain().is_some_and(|host| {
+            !host.eq_ignore_ascii_case("localhost") && !host.ends_with(".localhost")
+        });
+    Ok(app
+        .layer(axum::middleware::from_fn(
+            move |request: Request, next: Next| async move {
+                let mut response = next.run(request).await;
+                add_security_headers(response.headers_mut(), hsts);
+                response
+            },
+        ))
+        .layer(axum::middleware::from_fn(
+            move |mut request: Request, next: Next| {
+                request
+                    .headers_mut()
+                    .insert("x-forwarded-host", public_host.clone());
+                request
+                    .headers_mut()
+                    .insert("x-forwarded-proto", public_proto.clone());
+                async move { next.run(request).await }
+            },
+        )))
+}
+
+/// The console is a static export served from this origin. Next.js inlines its bootstrap
+/// scripts and React sets inline styles, so those need 'unsafe-inline'; everything else is
+/// limited to this origin and the console can never be framed.
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self' 'unsafe-inline'; \
+    style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; \
+    connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; \
+    frame-ancestors 'none'";
+
+fn add_security_headers(headers: &mut axum::http::HeaderMap, hsts: bool) {
+    let defaults = [
+        ("content-security-policy", CONTENT_SECURITY_POLICY),
+        ("x-frame-options", "DENY"),
+        ("x-content-type-options", "nosniff"),
+        ("referrer-policy", "no-referrer"),
+        (
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        ),
+        ("cross-origin-opener-policy", "same-origin"),
+    ];
+    for (name, value) in defaults {
+        if !headers.contains_key(name) {
+            headers.insert(name, HeaderValue::from_static(value));
+        }
+    }
+    if hsts && !headers.contains_key("strict-transport-security") {
+        headers.insert(
+            "strict-transport-security",
+            HeaderValue::from_static("max-age=31536000"),
+        );
+    }
 }
 
 async fn run_services(
@@ -384,6 +433,7 @@ mod tests {
             collector_import_token: cipher.collector_import_token(),
             cipher,
             http: reqwest::Client::new(),
+            throttle: std::sync::Arc::default(),
         })
     }
 

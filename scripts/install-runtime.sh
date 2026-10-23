@@ -195,6 +195,7 @@ if [ "$ch_mode" = native ]; then
 <clickhouse>
 <logger><level>warning</level><console>true</console></logger>
 <listen_host>127.0.0.1</listen_host><http_port>$TALLY_CLICKHOUSE_PORT</http_port>
+<disable_internal_dns_cache>1</disable_internal_dns_cache>
 <path>$(xml_escape "$TALLY_DATA_DIR/clickhouse")/</path>
 <tmp_path>$(xml_escape "$TALLY_DATA_DIR/clickhouse/tmp")/</tmp_path>
 <user_files_path>$(xml_escape "$TALLY_DATA_DIR/clickhouse/user_files")/</user_files_path>
@@ -202,6 +203,12 @@ if [ "$ch_mode" = native ]; then
 <profiles><default/></profiles><quotas><default/></quotas>
 </clickhouse>
 XML
+    elif ! grep -q '<disable_internal_dns_cache>' "$TALLY_CONFIG_DIR/clickhouse.xml"; then
+        # Single-node loopback storage resolves no peers; without this, ClickHouse logs a DNS
+        # error whenever the machine's own host name does not resolve.
+        (umask 077 && sed 's|</clickhouse>|<disable_internal_dns_cache>1</disable_internal_dns_cache></clickhouse>|' \
+            "$TALLY_CONFIG_DIR/clickhouse.xml" > "$TALLY_CONFIG_DIR/clickhouse.xml.new")
+        mv "$TALLY_CONFIG_DIR/clickhouse.xml.new" "$TALLY_CONFIG_DIR/clickhouse.xml"
     fi
     success 'Activity storage is prepared. It will run with Tally.'
 fi
@@ -219,7 +226,9 @@ done
 mv "$updated" "$TALLY_ENV_FILE"
 if [ "${#legacy_units[@]}" -gt 0 ]; then
     notice 'Switching this installation from separate database services to one supervised Tally service.'
-    if [ "$(uname -s)" = Darwin ]; then launchctl bootout "gui/$(id -u)/ai.godel.tally.server" >/dev/null 2>&1 || true
+    if [ "$(uname -s)" = Darwin ]; then
+        launchctl bootout "gui/$(id -u)/ai.godel.tally.server" >/dev/null 2>&1 || true
+        wait_for_launchd_removal server || fail 'The running Tally service did not stop within two minutes.'
     else systemctl --user stop tally-server.service; fi
     for db in "${legacy_units[@]}"; do
         if [ "$(uname -s)" = Darwin ]; then
@@ -262,6 +271,7 @@ if [ "$no_service" = 0 ]; then
         notice 'The first start prepares your data. This can take a few minutes.'
         if [ "$(uname -s)" = Darwin ]; then
             launchctl bootout "gui/$(id -u)/ai.godel.tally.server" >/dev/null 2>&1 || true
+            wait_for_launchd_removal server || fail 'The running Tally service did not stop within two minutes.'
         else systemctl --user stop tally-server.service >/dev/null 2>&1 || true; fi
         start_service server
         ready=0

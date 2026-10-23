@@ -78,8 +78,8 @@ pub(crate) async fn update(
             }
         }
     };
-    sqlx::query("INSERT INTO audit_log (audit_id,actor,action,entity_type,entity_id,detail) VALUES ($1,'local_operator',$2,'estate_entity',$3,$4)")
-        .bind(Uuid::now_v7()).bind(action).bind(request.entity_id.to_string()).bind(serde_json::json!({"installation_id":identity.installation_id,"kind":record.detail.kind,"content_retained":false})).execute(&mut *transaction).await.map_err(ApiError::dependency)?;
+    sqlx::query("INSERT INTO audit_log (audit_id,actor,action,entity_type,entity_id,detail) VALUES ($1,$5,$2,'estate_entity',$3,$4)")
+        .bind(Uuid::now_v7()).bind(action).bind(request.entity_id.to_string()).bind(serde_json::json!({"installation_id":identity.installation_id,"kind":record.detail.kind,"content_retained":false})).bind(tally_store_postgres::audit_actor()).execute(&mut *transaction).await.map_err(ApiError::dependency)?;
     transaction.commit().await.map_err(ApiError::dependency)?;
     Ok(Json(
         serde_json::json!({"entity_id":request.entity_id,"saved":true}),
@@ -119,7 +119,7 @@ mod tests {
         let store = Arc::new(PostgresStore::connect(&url).await.unwrap());
         store.migrate().await.unwrap();
         store.migrate().await.unwrap();
-        assert_eq!(store.migration_head().await.unwrap(), 18);
+        assert_eq!(store.migration_head().await.unwrap(), 12);
         let state = state_from_store(store.clone(), SecretCipher::from_bytes([7; 32]))
             .await
             .unwrap();
