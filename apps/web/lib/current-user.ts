@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { authFetch } from "./session";
 
 export type CurrentUser = { id: string; email: string; display_name: string; role: "admin" | "member" };
 
@@ -12,9 +13,18 @@ export const isAuthPage = (pathname: string) => authPages.has(pathname);
 let lookup: Promise<CurrentUser | null> | null = null;
 
 function load(): Promise<CurrentUser | null> {
-  lookup ??= fetch("/api/v1/auth/me", { cache: "no-store" })
-    .then(response => response.ok ? response.json() as Promise<{ user: CurrentUser }> : null)
-    .then(body => body?.user ?? null, () => null);
+  if (!lookup) {
+    const pending = authFetch("me", { cache: "no-store", signal: AbortSignal.timeout(5000) })
+      .then(response => {
+        if (response.status === 401) return null;
+        if (!response.ok) throw new Error("Account lookup unavailable");
+        return response.json() as Promise<{ user: CurrentUser }>;
+      })
+      .then(body => body?.user ?? null);
+    lookup = pending;
+    // Do not cache an outage as a signed-out user, or clear a newer session's lookup.
+    void pending.catch(() => { if (lookup === pending) lookup = null; });
+  }
   return lookup;
 }
 
@@ -24,9 +34,21 @@ export function useCurrentUser(): CurrentUser | null | undefined {
   const [user, setUser] = useState<CurrentUser | null | undefined>(undefined);
   useEffect(() => {
     if (authPages.has(pathname)) { lookup = null; return; }
-    let active = true;
-    void load().then(next => { if (active) setUser(next); });
-    return () => { active = false; };
+    let active = true, pending = false;
+    let retry: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      if (!active || pending) return;
+      clearTimeout(retry); pending = true;
+      void load().then(next => { if (active) setUser(next); }, () => {
+        if (active) retry = setTimeout(refresh, 5000);
+      }).finally(() => { pending = false; });
+    };
+    refresh();
+    window.addEventListener("online", refresh); window.addEventListener("focus", refresh);
+    return () => {
+      active = false; clearTimeout(retry);
+      window.removeEventListener("online", refresh); window.removeEventListener("focus", refresh);
+    };
   }, [pathname]);
   return isAuthPage(pathname) ? null : user;
 }

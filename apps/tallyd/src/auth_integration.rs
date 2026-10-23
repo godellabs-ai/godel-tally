@@ -244,6 +244,18 @@ async fn auth_integration() {
     let status = body(api.call("GET", "/api/v1/auth/status", "", json!({})).await).await;
     assert_eq!(status["first_user_registration_open"], true);
     assert_eq!(status["email_configured"], false);
+    assert!(status["user"].is_null());
+    let invalid_session = body(
+        api.call(
+            "GET",
+            "/api/v1/auth/status",
+            &format!("tally_session={}", "0".repeat(64)),
+            json!({}),
+        )
+        .await,
+    )
+    .await;
+    assert!(invalid_session["user"].is_null());
     let registration = |email: &str| json!({"email":email,"first_name":"Test","last_name":"User","password":"initial-password-123"});
     // Only one concurrent first-user registration may become administrator.
     let (one, two) = tokio::join!(
@@ -267,6 +279,14 @@ async fn auth_integration() {
         assert_eq!(one.status(), 403);
         ("other@example.test", cookie(two))
     };
+    let status_response = api
+        .call("GET", "/api/v1/auth/status", &admin_cookie, json!({}))
+        .await;
+    assert_eq!(status_response.headers()["cache-control"], "no-store");
+    let signed_in_status = body(status_response).await;
+    assert_eq!(signed_in_status["user"]["email"], admin_email);
+    assert_eq!(signed_in_status["user"]["role"], "admin");
+    assert!(signed_in_status["user"].get("password_hash").is_none());
     for path in ["sso", "sso/start", "sso/callback", "oidc"] {
         assert_eq!(
             api.call(
@@ -563,6 +583,45 @@ async fn auth_integration() {
             .any(|e| e["action"] == "auth.invitation.revoked" && e["actor"] == admin_email)
     );
     assert!(entries.iter().any(|e| e["action"] == "auth.signed_in"));
+    // Selected audit deletion must retain a receipt attributed to the caller.
+    body(
+        api.call(
+            "POST",
+            "/api/v1/tally/data/delete",
+            &admin_cookie,
+            json!({"scopes":["audit_logs"],"confirmation":"DELETE SELECTED DATA"}),
+        )
+        .await,
+    )
+    .await;
+    let after_delete = body(
+        api.call("GET", "/api/v1/tally/audit", &admin_cookie, json!({}))
+            .await,
+    )
+    .await;
+    let receipt = after_delete["items"].as_array().unwrap();
+    assert_eq!(receipt.len(), 1);
+    assert_eq!(receipt[0]["action"], "data.deleted");
+    assert_eq!(receipt[0]["actor"], admin_email);
+    assert!(
+        receipt[0]["detail"]["audit_entries_deleted"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    // Empty content is invalid input, never a payload-size error.
+    for data in ["", " \n\t"] {
+        let empty = api
+            .call(
+                "POST",
+                "/api/v1/tally/imports/preview",
+                &admin_cookie,
+                json!({"adapter":"nextdns","checkpoint":"qa-empty","data":data}),
+            )
+            .await;
+        assert_eq!(empty.status(), 422);
+        assert_eq!(empty.json::<Value>().await.unwrap()["code"], "import_empty");
+    }
     // Anonymous callers are refused before request bodies are parsed.
     assert_eq!(
         api.call("POST", "/api/v1/auth/invitations", "", json!({}))
@@ -684,6 +743,13 @@ async fn auth_integration() {
         .split("#token=")
         .nth(1)
         .unwrap();
+    assert_eq!(api.call("POST", "/api/v1/auth/me/password", &member, json!({"current_password":"incorrect-password-123","new_password":"changed-password-123"})).await.status(), 400);
+    assert_eq!(
+        api.call("GET", "/api/v1/auth/me", &member, json!(null))
+            .await
+            .status(),
+        200
+    );
     assert_eq!(api.call("POST", "/api/v1/auth/me/password", &member, json!({"current_password":"replacement-password-123","new_password":"changed-password-123"})).await.status(), 204);
     assert_eq!(
         api.call(

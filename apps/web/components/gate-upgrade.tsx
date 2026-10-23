@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { upgradeApi, isTransientUpgradeError } from "@/lib/upgrade";
 import { formatDateTime } from "@/lib/datetime";
+import { authFetch } from "@/lib/session";
 
 type UpgradeStatus = {
   available?: boolean; unavailable_reason?: string | null;
@@ -109,7 +110,7 @@ export function GateUpgrade() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/auth/me", { cache: "no-store" })
+    void authFetch("me", { cache: "no-store" })
       .then(response => response.ok ? response.json() : null).catch(() => null)
       .then(body => { if (active) setIsAdmin(body?.user?.role === "admin"); });
     return () => { active = false; };
@@ -188,7 +189,7 @@ export function GateUpgrade() {
     portalWindow.document.title = "Opening Gödel Gate registration";
     portalWindow.document.body.textContent = "Opening registration…";
     try {
-      const response = await fetch("/api/v1/auth/me", { cache: "no-store" }).catch(() => null);
+      const response = await authFetch("me", { cache: "no-store" }).catch(() => null);
       if (!response?.ok) throw new Error("Could not read your account. Sign in again and retry.");
       const body = await response.json() as { user: { email: string; first_name: string | null; last_name: string | null } };
       const state = crypto.randomUUID();

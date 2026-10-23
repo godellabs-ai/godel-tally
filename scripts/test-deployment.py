@@ -30,6 +30,19 @@ if name == 'uname': print(os.environ.get('TEST_OS','Linux') if '-s' in args else
 elif name == 'id': print('1000' if '-u' in args else 'operator')
 elif name == 'sw_vers': print(os.environ.get('TEST_MACOS','26.0'))
 elif name == 'getconf': print(os.environ.get('TEST_LIBC','glibc 2.36'))
+elif name == 'launchctl':
+    running=root/'launchd-running'; pending=root/'launchd-removal-polls'
+    if args[0]=='bootout':
+        running.unlink(missing_ok=True)
+        pending.write_text(os.environ.get('TEST_LAUNCHD_REMOVAL_POLLS','0'))
+    elif args[0]=='print':
+        remaining=int(pending.read_text()) if pending.exists() else 0
+        if remaining:
+            pending.write_text(str(remaining-1)); sys.exit(0)
+        sys.exit(0 if running.exists() else 1)
+    elif args[0]=='bootstrap':
+        if pending.exists() and int(pending.read_text()): sys.exit(1)
+        running.touch()
 elif name == 'curl' and os.environ.get('BOOTSTRAP_SOURCE'):
     import shutil
     source=pathlib.Path(os.environ['BOOTSTRAP_SOURCE'])
@@ -146,7 +159,7 @@ class Deployment(unittest.TestCase):
         shutil.copytree(ROOT/'scripts', self.bundle/'scripts')
         shutil.copy(ROOT/'uninstall.sh', self.bundle/'uninstall.sh')
         shutil.copy(ROOT/'install.sh', self.bundle/'install.sh')
-        (self.bundle/'tallyd').write_text('#!/bin/bash\n[ "$1" = --check-ui ]\n')
+        (self.bundle/'tallyd').write_text('#!/bin/bash\n[ "$1" = --check-ui ] || [ "$1" = check-stopped ]\n')
         (self.bundle/'tallyd').chmod(0o755)
         for path in [self.root/'brew/bin', self.root/'brew/postgresql@18/bin']:
             path.mkdir(parents=True, exist_ok=True)
@@ -458,6 +471,15 @@ class Deployment(unittest.TestCase):
         self.assertEqual(agent['ProgramArguments'],['/bin/bash',str(Path(self.env['TALLY_INSTALL_DIR'])/'tally.sh')])
         self.assertTrue(agent['KeepAlive'])
         self.assertFalse(any(c[:2] == ['systemctl','enable'] for c in self.commands()))
+    def test_macos_reinstall_waits_for_launchd_removal(self):
+        self.env.update(TEST_OS='Darwin', TEST_LAUNCHD_REMOVAL_POLLS='3')
+        self.install()
+        commands=self.commands()
+        stop=next(i for i,c in enumerate(commands) if c[:2]==['launchctl','bootout'])
+        start=next(i for i,c in enumerate(commands) if c[:2]==['launchctl','bootstrap'])
+        self.assertEqual(sum(c[:2]==['launchctl','print'] for c in commands[stop:start]),5)
+        self.assertTrue(any(c[:2]==['launchctl','kickstart'] for c in commands[start:]))
+
     def test_native_private_instances_are_idempotent(self):
         self.install('--no-start')
         config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env';saved=config.read_bytes()
@@ -473,6 +495,20 @@ class Deployment(unittest.TestCase):
         self.assertFalse((self.home/'.config/systemd/user/tally-clickhouse.service').exists())
         self.assertEqual(config.read_bytes(),saved)
         self.assertIn('supervise', (Path(self.env['TALLY_INSTALL_DIR'])/'tally.sh').read_text())
+    def test_private_clickhouse_dns_setting_is_added_on_upgrade(self):
+        self.install('--no-service')
+        config = Path(self.env['TALLY_CONFIG_DIR'])/'clickhouse.xml'
+        setting = '<disable_internal_dns_cache>1</disable_internal_dns_cache>'
+        original = config.read_text()
+        self.assertIn(setting, original)
+        config.write_text(original.replace(setting, ''))
+        self.install('--no-service')
+        upgraded = config.read_text()
+        self.assertEqual(upgraded.count(setting), 1)
+        self.install('--no-service')
+        self.assertEqual(config.read_text(), upgraded)
+        self.assertEqual(upgraded.replace(setting, '').split(), original.replace(setting, '').split())
+
     def test_native_manual_install_needs_no_user_service_manager(self):
         self.env['FAIL_COMMAND']='systemctl'
         self.install('--no-service')
@@ -577,6 +613,7 @@ class Deployment(unittest.TestCase):
     def test_uninstall_native_macos_stops_only_private_tally_services(self):
         self.env['TEST_OS']='Darwin'
         self.install('--no-start')
+        (self.root/'launchd-running').touch()  # Model an already-started user service.
         config=Path(self.env['TALLY_CONFIG_DIR'])/'tally.env';saved=config.read_bytes()
         before=self.commands()
         self.run_script(ROOT/'uninstall.sh')
@@ -591,6 +628,7 @@ class Deployment(unittest.TestCase):
         # launchctl bootout returns while the supervisor still holds its lock.
         self.env['TEST_OS']='Darwin'
         self.install('--no-start')
+        (self.root/'launchd-running').touch()
         data=Path(self.env['TALLY_DATA_DIR']);(data/'supervisor.lock').touch()
         binary=Path(self.env['TALLY_INSTALL_DIR'])/'tallyd'
         checks=self.root/'stop-checks'

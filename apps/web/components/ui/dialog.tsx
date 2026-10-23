@@ -28,10 +28,10 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onCloseAutoFocus, ...props }, ref) => {
-  // Dialogs opened from code have no Radix trigger to return focus to, so remember whichever
-  // control had focus when the dialog first rendered, before focus moves into it.
-  const [opener] = React.useState(() => typeof document === "undefined" ? null : document.activeElement);
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  // Content can remain mounted while closed. Capture on every opening, before
+  // Radix moves focus, so programmatic dialogs return to the current invoker.
+  const opener = React.useRef<Element | null>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -41,11 +41,15 @@ const DialogContent = React.forwardRef<
           "fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-card p-6 shadow-2xl",
           className
         )}
+        onOpenAutoFocus={(event) => {
+          opener.current = document.activeElement;
+          onOpenAutoFocus?.(event);
+        }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
-          if (!event.defaultPrevented && opener instanceof HTMLElement && opener.isConnected) {
+          if (!event.defaultPrevented && opener.current instanceof HTMLElement && opener.current !== document.body && opener.current.isConnected) {
             event.preventDefault();
-            opener.focus();
+            opener.current.focus();
           }
         }}
         {...props}

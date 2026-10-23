@@ -449,15 +449,27 @@ struct RegisterInput {
     invitation_token: Option<String>,
 }
 
-async fn status(State(state): State<Arc<AuthState>>) -> ApiResult<Json<serde_json::Value>> {
+async fn status(
+    State(state): State<Arc<AuthState>>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tally_auth_users")
         .fetch_one(&state.pool)
         .await
         .map_err(db_error)?;
     let email_configured = password_reset_email(&state).await.is_some();
+    // The public sign-in page can discover its own session without an expected 401
+    // or a second request. Invalid/expired cookies are anonymous; storage errors
+    // must still surface so the page can retry. auth_gate marks this response no-store.
+    let user = match current_user(&state, &headers).await {
+        Ok(user) => Some(user),
+        Err((StatusCode::UNAUTHORIZED, _)) => None,
+        Err(error) => return Err(error),
+    };
     Ok(Json(serde_json::json!({
         "first_user_registration_open": count == 0,
         "email_configured": email_configured,
+        "user": user,
     })))
 }
 
@@ -759,7 +771,7 @@ async fn change_password(
             .await
             .map_err(db_error)?;
         return Err(error(
-            StatusCode::UNAUTHORIZED,
+            StatusCode::BAD_REQUEST,
             "Current password is incorrect",
         ));
     }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { isTransientUsersError, loadInvitations, loadUsers, type Invitation, type User } from "@/lib/users";
 import { formatDateTime } from "@/lib/datetime";
+import { authFetch } from "@/lib/session";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -66,7 +67,7 @@ export default function UsersPage() {
   async function request(path: string, body: unknown, method: "POST" | "DELETE" = "POST") {
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await fetch(`/api/v1/auth/${path}`, method === "DELETE" ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await authFetch(path, method === "DELETE" ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error((await response.json()).error || "Request failed");
       return response;
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Request failed"); throw cause; }
@@ -153,7 +154,7 @@ export default function UsersPage() {
     {notice && <p role="status" className="rounded-md bg-primary/10 p-3 text-sm">{notice}</p>}
     <section className="rounded-xl border border-border bg-card p-5"><h3 className="font-semibold">Invite a user</h3>
       <form onSubmit={createInvite} className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="min-w-64 flex-1 text-xs font-semibold">Email address<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="person@example.com" className={field} /></label>
+        <label className="min-w-0 basis-64 flex-1 text-xs font-semibold">Email address<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="person@example.com" className={field} /></label>
         <label className="text-xs font-semibold">Role<select value={inviteRole} onChange={e => setInviteRole(e.target.value === "admin" ? "admin" : "member")} className={field}><option value="member">Member</option><option value="admin">Administrator</option></select></label>
         <button disabled={busy} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">Create invitation</button>
       </form>
@@ -161,15 +162,15 @@ export default function UsersPage() {
       {inviteUrl && <div className="mt-4"><label className="text-xs font-semibold">One-time invitation link<input readOnly value={inviteUrl} onFocus={e => e.target.select()} className={field} /></label></div>}
     </section>
     {invitations.length > 0 && <section className="rounded-xl border border-border bg-card p-5"><h3 className="font-semibold">Pending invitations</h3>
-      <div className="mt-4 divide-y divide-border">{invitations.map(invitation => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
-        <div><strong>{invitation.email}</strong><div className="text-muted-foreground">{invitation.role === "admin" ? "Administrator" : "Member"} · expires {formatDateTime(invitation.expires_at)}{invitation.invited_by ? ` · invited by ${invitation.invited_by}` : ""}</div></div>
+      <div className="mt-4 divide-y divide-border">{invitations.map(invitation => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 break-words [overflow-wrap:anywhere] py-3 text-sm">
+        <div className="min-w-0 max-w-full"><strong className="break-all">{invitation.email}</strong><div className="break-words text-muted-foreground">{invitation.role === "admin" ? "Administrator" : "Member"} · expires {formatDateTime(invitation.expires_at)}{invitation.invited_by ? ` · invited by ${invitation.invited_by}` : ""}</div></div>
         <button type="button" disabled={busy} onClick={() => void revoke(invitation)} className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50" aria-label={`Revoke invitation for ${invitation.email}`}>Revoke</button>
       </div>)}</div>
     </section>}
     <section className="rounded-xl border border-border bg-card p-5"><h3 className="font-semibold">People with access</h3>
       {loading && <p role="status" className="mt-4 text-sm text-muted-foreground">Loading console users…</p>}
-      <div className="mt-4 divide-y divide-border">{users.map(user => <div key={user.id} className="py-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{user.display_name}</strong><div className="text-muted-foreground">{user.email} · {user.role}{user.disabled ? " · disabled" : ""}{user.has_password ? "" : " · no password set"}</div></div>
+      <div className="mt-4 divide-y divide-border">{users.map(user => <div key={user.id} className="break-words [overflow-wrap:anywhere] py-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0 max-w-full"><strong>{user.display_name}</strong><div className="break-all text-muted-foreground">{user.email} · {user.role}{user.disabled ? " · disabled" : ""}{user.has_password ? "" : " · no password set"}</div></div>
           <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => editName(user)} className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50">Edit name</button>
             {user.id === currentUserId && user.has_password && <button type="button" disabled={busy} onClick={() => { setError(""); setPasswordError(""); setEditingId(null); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setChangingPassword(true); }} className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50">Change password</button>}
             {user.id !== currentUserId && !user.disabled && <button type="button" disabled={busy} onClick={() => void resetPassword(user)} className="rounded-md border border-border px-3 py-1.5 disabled:opacity-50">{user.has_password ? "Reset password" : "Send password link"}</button>}

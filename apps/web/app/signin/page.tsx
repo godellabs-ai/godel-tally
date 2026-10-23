@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Brand } from "@/components/brand";
+import { safeReturnPath } from "@/lib/session";
 
-type Status = { first_user_registration_open: boolean; email_configured: boolean };
+type Status = { first_user_registration_open: boolean; email_configured: boolean; user?: SignedIn | null };
 type SignedIn = { email: string; display_name: string };
 
 /** Where to return after signing in: a same-origin path only, never another site. */
 function safeNext() {
-  const next = new URLSearchParams(window.location.search).get("next") ?? "/";
-  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") && !next.startsWith("/signin") ? next : "/";
+  return safeReturnPath(new URLSearchParams(window.location.search).get("next"), window.location.origin);
 }
 
 export default function SignInPage() {
@@ -36,10 +36,6 @@ export default function SignInPage() {
       if (token && /^[a-f0-9]{64}$/.test(token)) { setInvite(token); setRegister(true); history.replaceState(null, "", "/signin"); }
       setResumed(new URLSearchParams(window.location.search).has("next"));
     }, 0);
-    void fetch("/api/v1/auth/me", { cache: "no-store" })
-      .then(response => response.ok ? response.json() as Promise<{ user: SignedIn }> : null)
-      .then(body => { if (active && body) setSignedIn(body.user); })
-      .catch(() => {});
     let retry = 0;
     const loadStatus = () => {
       void fetch("/api/v1/auth/status", { cache: "no-store", signal: AbortSignal.timeout(4000) })
@@ -48,6 +44,7 @@ export default function SignInPage() {
           if (!active) return;
           // Status only needs retrying while authentication is unreachable.
           window.clearInterval(retry);
+          setSignedIn(value.user ?? null);
           setStatus(value); setError(current => current === "Tally authentication is unavailable. Retrying…" ? "" : current);
           if (value.first_user_registration_open) setRegister(true);
         })

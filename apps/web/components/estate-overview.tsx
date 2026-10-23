@@ -48,7 +48,7 @@ export function EstateOverview({ flow, records, loading, error, refresh, loadMor
       {error}
       <EstateEventFlowOverview {...presentation} flow={filteredFlow} showRuntimeColumns={showRuntimeColumns} lockedNodeIds={nodeIds} onLockedNodeIdsChange={setNodeIds} expandPaths={scope.lens === "exposure"}
         selectionAction={selectionAction ? ids => selectionAction(ids, scopedPaths) : undefined}/>
-      {!scopedPaths.length ? <p role="status" className="text-center text-sm text-muted-foreground">{loading ? "Loading overview…" : "No matching activity."}</p> : null}
+      <p role="status" className="min-h-5 text-center text-sm text-muted-foreground">{!scopedPaths.length ? loading ? "Loading overview…" : "No matching activity." : ""}</p>
     </div>
     {showInventory ? <section id="inventory" aria-label="Overview inventory" className="min-w-0 scroll-mt-20 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">Inventory</h2>{active ? <span className="text-xs text-muted-foreground">{label}</span> : null}</div>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isTransientUsersError, loadUsers } from "../lib/users.ts";
+import { sourceModule } from "./source-module.mjs";
+const { isTransientUsersError, loadUsers } = sourceModule("lib/users.ts");
 
 test("users data recovers after dropped connections and gateway responses", async () => {
   const originalFetch = globalThis.fetch;

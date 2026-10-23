@@ -897,7 +897,7 @@ export function EventFlowDiagram({
         }
         .flow-txt span {
           display: block;
-          font-size: 10px;
+          font-size: 12px;
           color: var(--muted-foreground);
           margin-top: 2px;
           font-weight: 500;

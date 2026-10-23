@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { authFetch } from "../lib/session";
 
 type Provider = "smtp" | "ses" | "sendgrid" | "mailgun" | "postmark" | "resend";
 type EmailView = {
@@ -41,7 +42,7 @@ const fields: Record<Provider, Field[]> = {
 const select = "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm";
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/v1/auth/${path}`, body === undefined ? { cache: "no-store" }
+  const response = await authFetch(path, body === undefined ? { cache: "no-store" }
     : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.error ?? "Email settings are unavailable.");

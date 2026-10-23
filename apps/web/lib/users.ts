@@ -1,3 +1,5 @@
+import { authFetch } from "./session";
+
 export type User = { id: string; email: string; display_name: string; first_name: string | null; last_name: string | null; role: "admin" | "member"; disabled: boolean; has_password: boolean };
 
 export class UsersApiError extends Error {
@@ -10,15 +12,12 @@ export const isTransientUsersError = (cause: unknown) => cause instanceof UsersA
 async function read<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/auth/${path}`, { cache: "no-store", signal: AbortSignal.any([
+    response = await authFetch(path, { cache: "no-store", signal: AbortSignal.any([
       AbortSignal.timeout(10_000), ...(signal ? [signal] : []),
     ]) });
   } catch {
     if (signal?.aborted) throw signal.reason;
     throw new UsersApiError("Tally is reconnecting. Retrying automatically.", 0);
-  }
-  if (response.status === 401 && typeof window !== "undefined" && !window.localStorage.getItem("auth_token")) {
-    window.location.assign(new URL(`/signin?next=${encodeURIComponent(window.location.pathname)}`, window.location.origin).href);
   }
   if (!response.ok) {
     const message = response.status === 401 ? "Sign in to view console users."

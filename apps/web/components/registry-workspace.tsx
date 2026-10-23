@@ -662,7 +662,7 @@ function SanctionSwitch({
 
 function Count({ value }: { value: number }) {
   return (
-    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums transition-colors group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground bg-muted text-muted-foreground">
+    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums transition-colors group-data-[state=active]:bg-primary-foreground group-data-[state=active]:text-primary bg-muted text-muted-foreground">
       {value}
     </span>
   );

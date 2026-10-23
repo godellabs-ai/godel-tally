@@ -1,3 +1,6 @@
+import { returnToSignIn } from "./session";
+export { returnToSignIn } from "./session";
+
 export interface TallyOverviewSummary {
   providers_observed: number;
   models_observed: number;
@@ -273,13 +276,6 @@ let deniedAt = 0;
 /** Whether a Tally request refused this user's role (403) since `time`, so a page can say the
  * view needs another role instead of reporting a connection problem. */
 export function accessDeniedSince(time: number) { return deniedAt >= time; }
-
-/** Sends a standalone console back to sign-in, returning to the current view afterwards. */
-export function returnToSignIn() {
-  const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  // A full navigation drops client state that belonged to the ended session.
-  window.location.assign(new URL(`/signin?next=${encodeURIComponent(here)}`, window.location.origin).href);
-}
 
 /** Fetches a Tally path and forwards a host application's bearer token when one is present. */
 export async function tallyFetch(path: string, init: RequestInit = {}) {
