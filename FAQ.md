@@ -52,7 +52,17 @@ Deletion is permanent.
 ## Does the standalone API authenticate users?
 
 Yes. Standalone Tally serves HTTPS and authenticates local email-and-password accounts. The first
-registered user is an administrator; subsequent users need invitations. Sessions use secure,
-HttpOnly cookies, and administrative operations require the administrator role. Use a trusted
+registered user is an administrator; subsequent users need invitations, which grant the Member
+or Administrator role. Administrators can change roles, but Tally always keeps one enabled
+administrator. Sessions use secure, HttpOnly cookies that last 12 hours, and administrative
+operations require the administrator role. Five failed sign-ins pause the source IP/email pair
+within a 15-minute failure window; 30 failures across emails pause the source IP. An account-wide
+15-minute lock remains after 50 consecutive failures across addresses. Credential requests share
+a burst budget of 20 per IP, replenished at 20 per minute. Reverse proxies and shared NAT make
+users share these IP limits; forwarded IP headers are not trusted. Use a trusted
 certificate and the configured public origin for shared access. No nginx is required.
+The in-memory throttle has a hard limit of 50,000 address and address/email entries.
+At capacity, new addresses receive HTTP 429; an address whose failed sign-in cannot
+be tracked is paused for 15 minutes. Cleanup runs at most once per minute and
+preserves active pauses.
 See [accounts and email](https://godel-labs.ai/docs/tally/accounts).

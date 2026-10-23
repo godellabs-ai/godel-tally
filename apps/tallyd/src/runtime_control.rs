@@ -80,12 +80,12 @@ async fn serve_controlled(
             if let Some(tls) = tls {
                 axum_server::bind_rustls(bind, tls)
                     .handle(server_handle)
-                    .serve(app.into_make_service())
+                    .serve(app.into_make_service_with_connect_info::<SocketAddr>())
                     .await
             } else {
                 axum_server::bind(bind)
                     .handle(server_handle)
-                    .serve(app.into_make_service())
+                    .serve(app.into_make_service_with_connect_info::<SocketAddr>())
                     .await
             }
         };

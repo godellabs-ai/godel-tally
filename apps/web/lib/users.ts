@@ -1,3 +1,5 @@
+import { authFetch } from "./session";
+
 export type User = { id: string; email: string; display_name: string; first_name: string | null; last_name: string | null; role: "admin" | "member"; disabled: boolean; has_password: boolean };
 
 export class UsersApiError extends Error {
@@ -10,7 +12,7 @@ export const isTransientUsersError = (cause: unknown) => cause instanceof UsersA
 async function read<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/auth/${path}`, { cache: "no-store", signal: AbortSignal.any([
+    response = await authFetch(path, { cache: "no-store", signal: AbortSignal.any([
       AbortSignal.timeout(10_000), ...(signal ? [signal] : []),
     ]) });
   } catch {
@@ -33,4 +35,10 @@ export async function loadUsers(signal?: AbortSignal) {
     read<{ users: User[] }>("users", signal), read<{ user: { id: string } }>("me", signal),
   ]);
   return { users: people.users, currentUserId: me.user.id };
+}
+
+export type Invitation = { id: string; email: string; role: "admin" | "member"; invited_by: string | null; created_at: string; expires_at: string };
+
+export async function loadInvitations(signal?: AbortSignal) {
+  return (await read<{ invitations: Invitation[] }>("invitations", signal)).invitations;
 }

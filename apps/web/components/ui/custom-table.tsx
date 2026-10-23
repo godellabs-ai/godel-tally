@@ -61,6 +61,8 @@ interface CustomTableProps<T> {
   // Selection
   selectedKeys?: Set<string | number>;
   onSelectionChange?: (keys: Set<string | number>) => void;
+  /** Accessible name for a row's selection checkbox, such as "Select OpenAI". */
+  selectionLabel?: (item: T) => string;
   // Empty state customization
   emptyStateIcon?: React.ComponentType<{ className?: string }>;
   emptyStateTitle?: string;
@@ -100,6 +102,7 @@ export function CustomTable<T>({
   rowClassName,
   className,
   selectedKeys,
+  selectionLabel,
   onSelectionChange,
   emptyStateIcon,
   emptyStateTitle,
@@ -180,8 +183,10 @@ export function CustomTable<T>({
                 <tr className="text-left text-[11px] font-bold uppercase tracking-wider">
                   {selectedKeys && onSelectionChange && (
                     <th className="w-10 px-6 py-3.5 align-middle">
+                      <span className="sr-only">Selection</span>
                       <input
                         type="checkbox"
+                        aria-label="Select all rows on this page"
                         checked={data.length > 0 && data.every(item => selectedKeys.has(keyExtractor(item)))}
                         onChange={(e) => {
                           const newSelected = new Set(selectedKeys);
@@ -240,6 +245,7 @@ export function CustomTable<T>({
                       >
                         <input
                           type="checkbox"
+                          aria-label={selectionLabel?.(item) ?? `Select row ${idx + 1}`}
                           checked={selectedKeys.has(keyExtractor(item))}
                           onChange={(e) => {
                             const newSelected = new Set(selectedKeys);

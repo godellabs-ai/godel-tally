@@ -249,7 +249,12 @@ sensitive data**: deploy and grant access accordingly.
 
 - AI logs expire after **90 days by default**; durable inventory survives log expiration.
 - Connector credentials are encrypted at rest with the installation's `TALLY_SECRET_KEY`.
-- Standalone access requires sign-in. The first account is an administrator; subsequent users need an invitation.
+- Standalone access requires sign-in. The first account is an administrator; subsequent users need an invitation, which grants the Member or Administrator role. Tally always keeps at least one enabled administrator.
+- Passwords are 12 to 1,024 characters (at most 4,096 UTF-8 bytes) and may not be whitespace-only, common, use fewer than four distinct characters, or contain the account's email address. Sessions last 12 hours from sign-in. Invitations last 7 days and reset links one hour.
+- Credential endpoints share a per-IP token bucket: a burst of 20 requests, replenished at 20 requests per minute. Five failures for one email pause that address/email pair; 30 failures across emails pause the address. Failure windows last 15 minutes from the first failure. An account locks for 15 minutes after 50 consecutive failures across addresses; attempts during that lock do not extend it or revoke existing sessions.
+- Limits use the connection's peer IP, not forwarded headers. Users behind a reverse proxy or shared NAT share its budget and address-wide pause; the Next.js development proxy also shares one address. Direct HTTPS access preserves distinct addresses where the network permits. In-memory IP limits reset on restart; account locks persist in PostgreSQL.
+- Throttling retains at most 50,000 address and address/email entries. At capacity, new addresses receive HTTP 429 until space is reclaimed. If a failed sign-in cannot allocate an email entry, that address is paused for 15 minutes. Existing pauses are preserved; expired entries are reclaimed at most once per minute.
+- The audit log records the signed-in user for account changes, sign-ins, connector, registry, scan and data operations, including deletion of the audit log itself.
 - Administrators can preview and delete selected data categories or all operational data. Accounts, installation identity, and the built-in catalog are preserved.
 
 Read the [privacy and storage model](https://godel-labs.ai/docs/tally/privacy-and-data) and [security policy](SECURITY.md).

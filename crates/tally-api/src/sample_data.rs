@@ -1383,6 +1383,11 @@ mod tests {
             after_cutoff.ai_logs,
             baseline.ai_logs + added.counts.ai_logs - cutoff.ai_logs
         );
+        // The selected-data deletion leaves its own audit record, which removal preserves.
+        let baseline = crate::DataInventory {
+            audit_events: baseline.audit_events + 1,
+            ..baseline.clone()
+        };
         assert_eq!(status_for(&state).await.unwrap().state, "partial");
         assert_eq!(
             add(State(state.clone())).await.unwrap().0.counts,

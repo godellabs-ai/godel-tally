@@ -71,11 +71,25 @@ WantedBy=default.target
 UNIT
     fi
 }
+# launchctl bootout returns before the job and its supervised databases have stopped. Until
+# launchd forgets the job, bootstrap fails and kickstart targets the job being removed.
+wait_for_launchd_removal() {
+    local label="gui/$(id -u)/ai.godel.tally.$1" attempt
+    for attempt in $(seq 1 120); do
+        launchctl print "$label" >/dev/null 2>&1 || return 0
+        sleep 1
+    done
+    return 1
+}
 start_service() {
-    local name="$1"
+    local name="$1" attempt
     if [ "$(uname -s)" = Darwin ]; then
         if ! launchctl print "gui/$(id -u)/ai.godel.tally.$name" >/dev/null 2>&1; then
-            launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.$name.plist"
+            for attempt in $(seq 1 10); do
+                launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.godel.tally.$name.plist" 2>/dev/null && break
+                [ "$attempt" != 10 ] || fail "Could not register ai.godel.tally.$name with launchd."
+                sleep 1
+            done
         fi
         launchctl kickstart "gui/$(id -u)/ai.godel.tally.$name"
     else

@@ -137,6 +137,7 @@ async fn auth_integration() {
         cipher: SecretCipher::from_bytes([7; 32]),
         collector_import_token: "collector-fixture".into(),
         http: Client::new(),
+        throttle: Arc::default(),
     });
     let tally = tally_api::state_from_store(store.clone(), state.cipher.clone())
         .await
@@ -243,6 +244,18 @@ async fn auth_integration() {
     let status = body(api.call("GET", "/api/v1/auth/status", "", json!({})).await).await;
     assert_eq!(status["first_user_registration_open"], true);
     assert_eq!(status["email_configured"], false);
+    assert!(status["user"].is_null());
+    let invalid_session = body(
+        api.call(
+            "GET",
+            "/api/v1/auth/status",
+            &format!("tally_session={}", "0".repeat(64)),
+            json!({}),
+        )
+        .await,
+    )
+    .await;
+    assert!(invalid_session["user"].is_null());
     let registration = |email: &str| json!({"email":email,"first_name":"Test","last_name":"User","password":"initial-password-123"});
     // Only one concurrent first-user registration may become administrator.
     let (one, two) = tokio::join!(
@@ -259,13 +272,21 @@ async fn auth_integration() {
             registration("other@example.test")
         )
     );
-    let (_admin_email, admin_cookie) = if one.status() == 200 {
+    let (admin_email, admin_cookie) = if one.status() == 200 {
         assert_eq!(two.status(), 403);
         ("admin@example.test", cookie(one))
     } else {
         assert_eq!(one.status(), 403);
         ("other@example.test", cookie(two))
     };
+    let status_response = api
+        .call("GET", "/api/v1/auth/status", &admin_cookie, json!({}))
+        .await;
+    assert_eq!(status_response.headers()["cache-control"], "no-store");
+    let signed_in_status = body(status_response).await;
+    assert_eq!(signed_in_status["user"]["email"], admin_email);
+    assert_eq!(signed_in_status["user"]["role"], "admin");
+    assert!(signed_in_status["user"].get("password_hash").is_none());
     for path in ["sso", "sso/start", "sso/callback", "oidc"] {
         assert_eq!(
             api.call(
@@ -417,6 +438,8 @@ async fn auth_integration() {
             401
         );
     }
+    // Five failures pause this client for this email only; the account itself is not locked,
+    // so a stranger guessing wrong cannot keep the real user out.
     assert_eq!(
         api.call(
             "POST",
@@ -426,12 +449,186 @@ async fn auth_integration() {
         )
         .await
         .status(),
-        401
+        429
     );
-    sqlx::query("UPDATE tally_auth_users SET locked_until = NOW() - INTERVAL '1 second' WHERE email = 'member@example.test'").execute(&pool).await.unwrap();
+    let locked: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+        "SELECT locked_until FROM tally_auth_users WHERE email = 'member@example.test'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        locked, None,
+        "per-client failures must not lock the account"
+    );
+    state.throttle.clear();
     let member = api
         .login("member@example.test", "initial-password-123")
         .await;
+    // Roles: invitations can grant administrator access, and the last administrator stays.
+    let admin_id = body(
+        api.call("GET", "/api/v1/auth/me", &admin_cookie, json!({}))
+            .await,
+    )
+    .await["user"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        api.call(
+            "POST",
+            &format!("/api/v1/auth/users/{admin_id}/role"),
+            &admin_cookie,
+            json!({"role":"member"})
+        )
+        .await
+        .status(),
+        409
+    );
+    let invited = body(
+        api.call(
+            "POST",
+            "/api/v1/auth/invitations",
+            &admin_cookie,
+            json!({"email":"second-admin@example.test","role":"admin"}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(invited["role"], "admin");
+    let pending = body(
+        api.call("GET", "/api/v1/auth/invitations", &admin_cookie, json!({}))
+            .await,
+    )
+    .await;
+    assert!(
+        pending["invitations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["email"] == "second-admin@example.test" && i["role"] == "admin")
+    );
+    assert_eq!(
+        api.call(
+            "DELETE",
+            &format!(
+                "/api/v1/auth/invitations/{}",
+                invited["id"].as_str().unwrap()
+            ),
+            &admin_cookie,
+            json!({})
+        )
+        .await
+        .status(),
+        204
+    );
+    let revoked_token = invited["invite_url"]
+        .as_str()
+        .unwrap()
+        .split("#invite=")
+        .nth(1)
+        .unwrap();
+    assert_eq!(
+        api.call(
+            "POST",
+            "/api/v1/auth/register",
+            "",
+            json!({"email":"second-admin@example.test","first_name":"Second","last_name":"Admin","password":"revoked-invite-pass-91","invitation_token":revoked_token})
+        )
+        .await
+        .status(),
+        403
+    );
+    // Weak passwords are refused even when long enough.
+    let weak = body(
+        api.call(
+            "POST",
+            "/api/v1/auth/invitations",
+            &admin_cookie,
+            json!({"email":"weak@example.test"}),
+        )
+        .await,
+    )
+    .await;
+    let weak_token = weak["invite_url"]
+        .as_str()
+        .unwrap()
+        .split("#invite=")
+        .nth(1)
+        .unwrap();
+    for password in ["            ", "passwordpassword", "weak@example.test1"] {
+        assert_eq!(
+            api.call(
+                "POST",
+                "/api/v1/auth/register",
+                "",
+                json!({"email":"weak@example.test","first_name":"Weak","last_name":"Password","password":password,"invitation_token":weak_token})
+            )
+            .await
+            .status(),
+            400,
+            "{password:?} must be refused"
+        );
+    }
+    // Account actions are attributed to the signed-in administrator.
+    let audit = body(
+        api.call("GET", "/api/v1/tally/audit", &admin_cookie, json!({}))
+            .await,
+    )
+    .await;
+    let entries = audit["items"].as_array().unwrap();
+    assert!(
+        entries
+            .iter()
+            .any(|e| e["action"] == "auth.invitation.revoked" && e["actor"] == admin_email)
+    );
+    assert!(entries.iter().any(|e| e["action"] == "auth.signed_in"));
+    // Selected audit deletion must retain a receipt attributed to the caller.
+    body(
+        api.call(
+            "POST",
+            "/api/v1/tally/data/delete",
+            &admin_cookie,
+            json!({"scopes":["audit_logs"],"confirmation":"DELETE SELECTED DATA"}),
+        )
+        .await,
+    )
+    .await;
+    let after_delete = body(
+        api.call("GET", "/api/v1/tally/audit", &admin_cookie, json!({}))
+            .await,
+    )
+    .await;
+    let receipt = after_delete["items"].as_array().unwrap();
+    assert_eq!(receipt.len(), 1);
+    assert_eq!(receipt[0]["action"], "data.deleted");
+    assert_eq!(receipt[0]["actor"], admin_email);
+    assert!(
+        receipt[0]["detail"]["audit_entries_deleted"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    // Empty content is invalid input, never a payload-size error.
+    for data in ["", " \n\t"] {
+        let empty = api
+            .call(
+                "POST",
+                "/api/v1/tally/imports/preview",
+                &admin_cookie,
+                json!({"adapter":"nextdns","checkpoint":"qa-empty","data":data}),
+            )
+            .await;
+        assert_eq!(empty.status(), 422);
+        assert_eq!(empty.json::<Value>().await.unwrap()["code"], "import_empty");
+    }
+    // Anonymous callers are refused before request bodies are parsed.
+    assert_eq!(
+        api.call("POST", "/api/v1/auth/invitations", "", json!({}))
+            .await
+            .status(),
+        401
+    );
 
     let (smtp_port, mut mail, smtp_task) = smtp_sink().await;
     let smtp = json!({"provider":"smtp","enabled":true,"from_email":"tally@example.test","settings":{"host":"127.0.0.1","port":smtp_port.to_string(),"security":"none"}});
@@ -546,6 +743,13 @@ async fn auth_integration() {
         .split("#token=")
         .nth(1)
         .unwrap();
+    assert_eq!(api.call("POST", "/api/v1/auth/me/password", &member, json!({"current_password":"incorrect-password-123","new_password":"changed-password-123"})).await.status(), 400);
+    assert_eq!(
+        api.call("GET", "/api/v1/auth/me", &member, json!(null))
+            .await
+            .status(),
+        200
+    );
     assert_eq!(api.call("POST", "/api/v1/auth/me/password", &member, json!({"current_password":"replacement-password-123","new_password":"changed-password-123"})).await.status(), 204);
     assert_eq!(
         api.call(

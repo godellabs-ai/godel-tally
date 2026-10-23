@@ -162,6 +162,10 @@ pub(crate) fn litellm_api_base(value: &str) -> Result<Url> {
         "LiteLLM base URL must use HTTPS unless it is an HTTP loopback origin"
     );
     ensure!(
+        !tally_connectors::forbidden_destination_host(host),
+        "base URL points at a link-local or instance-metadata address"
+    );
+    ensure!(
         url.username().is_empty() && url.password().is_none(),
         "LiteLLM base URL cannot contain credentials"
     );

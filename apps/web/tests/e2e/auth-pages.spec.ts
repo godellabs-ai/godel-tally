@@ -5,7 +5,7 @@ async function mockAuth(page: Page, { signedIn = false, emailConfigured = true }
   const logins: unknown[] = [];
   await page.route("**/api/v1/auth/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/v1/auth/", "");
-    if (path === "status") return route.fulfill({ json: { first_user_registration_open: false, email_configured: emailConfigured } });
+    if (path === "status") return route.fulfill({ json: { first_user_registration_open: false, email_configured: emailConfigured, user: signedIn ? { id: "u", email: "ada@example.test", display_name: "Ada Admin", role: "admin" } : null } });
     if (path === "me") return signedIn
       ? route.fulfill({ json: { user: { id: "u", email: "ada@example.test", display_name: "Ada Admin", role: "admin" } } })
       : route.fulfill({ status: 401, json: { error: "Sign in required" } });

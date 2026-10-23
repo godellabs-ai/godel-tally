@@ -8,6 +8,7 @@ async function fixture(page: Page, failures: (number | "network")[]) {
   if (!process.env.TALLY_E2E_STORAGE_STATE) await page.context().addCookies([{ name: "tally_session", value: "recovery-test", url: test.info().project.use.baseURL! }]);
   await page.route("**/api/v1/auth/**", async route => {
     const path = new URL(route.request().url()).pathname.split("/").at(-1);
+    if (path === "invitations") return route.fulfill({ json: { invitations: [] } });
     if (path === "users") {
       requests++;
       const failure = failures.shift();

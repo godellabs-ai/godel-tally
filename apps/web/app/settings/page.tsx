@@ -3,8 +3,9 @@ import { DataRemoval } from "@/components/data-removal";
 import { EmailSettings } from "@/components/email-settings";
 import { PageData } from "@/components/page-data";
 import { getDataInventory } from "@/lib/tally";
+import { authFetch } from "@/lib/session";
 async function load() {
-  const response = await fetch("/api/v1/auth/me", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  const response = await authFetch("me", { cache: "no-store", signal: AbortSignal.timeout(5000) });
   if (!response.ok) return null;
   const body = await response.json() as { user?: { role?: string } };
   if (body.user?.role !== "admin") return { admin: false, inventory: null };

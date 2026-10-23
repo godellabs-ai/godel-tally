@@ -1,3 +1,6 @@
+import { returnToSignIn } from "./session";
+export { returnToSignIn } from "./session";
+
 export interface TallyOverviewSummary {
   providers_observed: number;
   models_observed: number;
@@ -268,12 +271,25 @@ async function problemMessage(response: Response) {
   return body.length ? body.slice(0, 300) : `Tally rejected this request (${response.status}).`;
 }
 
+let deniedAt = 0;
+
+/** Whether a Tally request refused this user's role (403) since `time`, so a page can say the
+ * view needs another role instead of reporting a connection problem. */
+export function accessDeniedSince(time: number) { return deniedAt >= time; }
+
 /** Fetches a Tally path and forwards a host application's bearer token when one is present. */
-export function tallyFetch(path: string, init: RequestInit = {}) {
+export async function tallyFetch(path: string, init: RequestInit = {}) {
   const token = typeof window !== "undefined" ? window.localStorage.getItem("auth_token") : null;
   const headers = new Headers(init.headers);
   if (token && !headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
-  return fetch(`${tallyApiBase()}${path}`, { ...init, headers });
+  const response = await fetch(`${tallyApiBase()}${path}`, { ...init, headers });
+  if (typeof window !== "undefined") {
+    if (response.status === 403) deniedAt = Date.now();
+    // The standalone session ended while the console was open. A host application that
+    // supplies its own bearer token handles expiry itself.
+    if (response.status === 401 && !token) returnToSignIn();
+  }
+  return response;
 }
 
 function tallyApiBase() {

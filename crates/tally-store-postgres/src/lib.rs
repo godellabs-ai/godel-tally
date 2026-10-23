@@ -29,6 +29,24 @@ use url::Url;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+tokio::task_local! {
+    static AUDIT_ACTOR: String;
+}
+
+/// Runs `future` with `actor` recorded on every audit event it writes.
+pub async fn with_audit_actor<F: std::future::Future>(actor: String, future: F) -> F::Output {
+    AUDIT_ACTOR.scope(actor, future).await
+}
+
+/// The signed-in user behind the current request, or `local_operator` for work that no
+/// user started, such as scheduled connector runs or embedded hosts without an identity.
+#[must_use]
+pub fn audit_actor() -> String {
+    AUDIT_ACTOR
+        .try_with(Clone::clone)
+        .unwrap_or_else(|_| "local_operator".to_owned())
+}
+
 const GOVERNANCE_FINDINGS_SQL: &str = r"
             SELECT jsonb_build_object(
                 'finding_id', f.finding_id,
@@ -1049,7 +1067,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','registry.overlay.created','registry_overlay',$3,$4)
+            VALUES ($1,$2,$5,'registry.overlay.created','registry_overlay',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1061,6 +1079,7 @@ impl PostgresStore {
             "matcher_count": request.matcher_count,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1319,7 +1338,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','classification.rules.created','classification_rule_set',$3,$4)
+            VALUES ($1,$2,$5,'classification.rules.created','classification_rule_set',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1334,6 +1353,7 @@ impl PostgresStore {
             "changed_system_count": changed.len(),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1421,7 +1441,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','classification.rules.deactivated','classification_rule_set',$3,$4)
+            VALUES ($1,$2,$5,'classification.rules.deactivated','classification_rule_set',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1431,6 +1451,7 @@ impl PostgresStore {
             "rule_set_id": rule_set_id,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -1879,7 +1900,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','data.purge.completed','purge',$3,$4)
+            VALUES ($1,$2,$5,'data.purge.completed','purge',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -1890,6 +1911,7 @@ impl PostgresStore {
             "deleted_counts": deleted,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2135,7 +2157,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.schedule.upserted','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.schedule.upserted','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2150,6 +2172,7 @@ impl PostgresStore {
             "credentials_sealed": job.credentials.is_some(),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2560,7 +2583,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.sync.requested','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.sync.requested','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2573,6 +2596,7 @@ impl PostgresStore {
             "source_reference_kind": job.config_refs.get("kind"),
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut **transaction)
         .await?;
         Ok(())
@@ -2665,7 +2689,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.deleted','connector',$3,$4)
+            VALUES ($1,$2,$5,'connector.deleted','connector',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2680,6 +2704,7 @@ impl PostgresStore {
             "observations_retained": true,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -2868,7 +2893,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator','connector.backfill.committed','connector_job',$3,$4)
+            VALUES ($1,$2,$5,'connector.backfill.committed','connector_job',$3,$4)
             ",
         )
         .bind(Uuid::now_v7())
@@ -2884,6 +2909,7 @@ impl PostgresStore {
             "preview_digest": request.preview_digest,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -3599,7 +3625,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,$2,'local_operator',$3,'entity_resolution',$4,$5)
+            VALUES ($1,$2,$6,$3,'entity_resolution',$4,$5)
             ",
         )
         .bind(Uuid::now_v7())
@@ -3621,6 +3647,7 @@ impl PostgresStore {
             "evidence_mutated": false,
             "content_retained": false,
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
 
@@ -5314,7 +5341,7 @@ impl PostgresStore {
             from_status,
             to_status: request.to_status,
             reason_code: request.reason_code,
-            actor: "local_operator".to_owned(),
+            actor: audit_actor(),
             previous_revision: current.1,
             new_revision: current.1 + 1,
             idempotency_key: request.idempotency_key,
@@ -6634,7 +6661,7 @@ impl PostgresStore {
         sqlx::query(
             r"
             INSERT INTO audit_log (audit_id, actor, action, entity_type, entity_id, detail)
-            VALUES ($1,'local_operator','registry.sanction.updated','registry',$2,$3)
+            VALUES ($1,$4,'registry.sanction.updated','registry',$2,$3)
             ",
         )
         .bind(Uuid::now_v7())
@@ -6652,6 +6679,7 @@ impl PostgresStore {
             "model_ids": model_ids,
             "affected": affected
         }))
+        .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -6821,12 +6849,15 @@ impl PostgresStore {
                 .execute(&mut *transaction)
                 .await?;
         }
+        let mut audit_entries_deleted = 0;
         if all || scopes.iter().any(|scope| scope == "audit_logs") {
-            sqlx::query("DELETE FROM audit_log WHERE $1::boolean OR at < $2")
-                .bind(before.is_none())
-                .bind(cutoff)
-                .execute(&mut *transaction)
-                .await?;
+            audit_entries_deleted =
+                sqlx::query("DELETE FROM audit_log WHERE $1::boolean OR at < $2")
+                    .bind(before.is_none())
+                    .bind(cutoff)
+                    .execute(&mut *transaction)
+                    .await?
+                    .rows_affected();
         }
         if all || scopes.iter().any(|scope| scope == "registry_sanctions") {
             sqlx::query("DELETE FROM tally_estate_reviews WHERE installation_id=$3 AND ($1::boolean OR updated_at < $2)")
@@ -6844,6 +6875,23 @@ impl PostgresStore {
             .bind(installation)
             .execute(&mut *transaction)
             .await?;
+        // Written after the deletions so a purge of the audit log still leaves this record.
+        sqlx::query(
+            r"
+            INSERT INTO audit_log (audit_id, actor, action, entity_type, entity_id, detail)
+            VALUES ($1,$2,'data.deleted','data',$3,$4)
+            ",
+        )
+        .bind(Uuid::now_v7())
+        .bind(audit_actor())
+        .bind(installation.to_string())
+        .bind(serde_json::json!({
+            "scopes": scopes,
+            "before": before,
+            "audit_entries_deleted": audit_entries_deleted,
+        }))
+        .execute(&mut *transaction)
+        .await?;
         transaction.commit().await?;
         self.data_inventory().await
     }
@@ -6993,7 +7041,7 @@ async fn put_scan_audit(
     sqlx::query(
         r"
         INSERT INTO audit_log (audit_id, at, actor, action, entity_type, entity_id, detail)
-        VALUES ($1,$2,'local_operator',$3,'scan',$4,$5)
+        VALUES ($1,$2,$6,$3,'scan',$4,$5)
         ",
     )
     .bind(Uuid::now_v7())
@@ -7001,6 +7049,7 @@ async fn put_scan_audit(
     .bind(action)
     .bind(scan_id.to_string())
     .bind(detail)
+    .bind(audit_actor())
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -9060,8 +9109,7 @@ mod tests {
         assert!(normalized_model_identity("/").is_none());
     }
     use tally_core::{
-        BasisPoints, EntityKeyAuthority, EntityKeyStatus, EntityKind, EntityRef,
-        RelationshipPredicate, RelationshipStatus, RelationshipSupportRole, RuleRef,
+        BasisPoints, EntityKind, EntityRef, RelationshipPredicate, RelationshipStatus, RuleRef,
     };
 
     #[test]
@@ -9450,196 +9498,147 @@ mod tests {
         assert_eq!(ambiguous.conflicts[0].candidate_count, 2);
     }
 
+    // The retired entity graph is no longer in the standalone schema. Exercise the
+    // durable finding attribution contract used by current connectors instead.
     #[tokio::test]
-    #[ignore = "requires TALLY_POSTGRES_URL and a disposable installation scope"]
+    #[ignore = "requires TALLY_DISPOSABLE_POSTGRES_URL with no findings"]
     #[allow(clippy::too_many_lines)]
-    async fn live_attribution_storage_is_replay_safe_and_lineage_aware() {
-        let url = std::env::var("TALLY_POSTGRES_URL").expect("TALLY_POSTGRES_URL");
+    async fn live_attribution_replays_preserve_connector_context() {
+        let url = std::env::var("TALLY_DISPOSABLE_POSTGRES_URL").expect("disposable database");
         let store = PostgresStore::connect(&url).await.expect("connect");
         store.migrate().await.expect("migrate");
-
-        let installation_id = Uuid::now_v7();
-        let at = Utc::now();
-        let workload = Entity {
-            entity_id: Uuid::now_v7(),
-            kind: EntityKind::Workload,
-            display_name: "Workload · test fixture".to_owned(),
-            created_at: at,
-            revision: 1,
-        };
-        let system = Entity {
-            entity_id: Uuid::now_v7(),
-            kind: EntityKind::AiSystem,
-            display_name: "AI system · test fixture".to_owned(),
-            created_at: at,
-            revision: 1,
-        };
-        store.put_entity(&workload).await.expect("workload");
-        store.put_entity(&system).await.expect("system");
-
-        let key = EntityKey {
-            installation_id,
-            key_type: "k8s_workload_uid_key".to_owned(),
-            key_value: "p1_test_fixture".to_owned(),
-            entity_id: workload.entity_id,
-            authority: EntityKeyAuthority::KubernetesApi,
-            strength: BasisPoints::MAX,
-            first_seen: at,
-            last_seen: at,
-            status: EntityKeyStatus::Active,
-            source_observation_id: Some(Uuid::now_v7()),
-            source_lineage_id: Some("kubernetes:p1_cluster".to_owned()),
-            revision: 1,
-        };
-        store.put_entity_key(&key).await.expect("key");
-        store.put_entity_key(&key).await.expect("key replay");
-        let mut wider_key_window = key.clone();
-        wider_key_window.first_seen = at - chrono::Duration::minutes(5);
-        wider_key_window.last_seen = at + chrono::Duration::minutes(5);
-        wider_key_window.source_observation_id = Some(Uuid::now_v7());
-        store
-            .put_entity_key(&wider_key_window)
-            .await
-            .expect("same-revision key observation extends time window");
-        let stored_window = sqlx::query_as::<_, (DateTime<Utc>, DateTime<Utc>)>(
-            "SELECT first_seen, last_seen FROM entity_keys \
-             WHERE installation_id = $1 AND key_type = $2 AND key_value = $3",
-        )
-        .bind(installation_id)
-        .bind(&key.key_type)
-        .bind(&key.key_value)
-        .fetch_one(&store.pool)
-        .await
-        .expect("key time window");
         assert_eq!(
-            stored_window,
-            (wider_key_window.first_seen, wider_key_window.last_seen)
+            store.list_governance_findings(100).await.unwrap(),
+            [] as [GovernanceFindingView; 0]
         );
-        let mut conflicting_key = key.clone();
-        conflicting_key.entity_id = system.entity_id;
-        assert!(matches!(
-            store.put_entity_key(&conflicting_key).await,
-            Err(PostgresStoreError::EntityKeyConflict)
-        ));
-
-        let relationship_id = EntityRelationship::deterministic_id(
-            installation_id,
-            workload.entity_id,
-            RelationshipPredicate::Uses,
-            system.entity_id,
-        );
-        let relationship = EntityRelationship {
-            relationship_id,
-            installation_id,
-            subject: EntityRef {
-                entity_id: workload.entity_id,
-                kind: workload.kind,
-            },
-            predicate: RelationshipPredicate::Uses,
-            object: EntityRef {
-                entity_id: system.entity_id,
-                kind: system.kind,
-            },
-            confidence: BasisPoints::new(8_500).expect("confidence"),
-            status: RelationshipStatus::Active,
-            valid_from: at,
-            valid_until: Some(at + chrono::Duration::minutes(5)),
-            rule: Some(RuleRef {
-                rule_id: "time_valid_workload_use".to_owned(),
-                version: "1".to_owned(),
-            }),
-            independent_lineage_count: 0,
-            created_at: at,
-            revision: 1,
-        };
-        let evidence = vec![
-            RelationshipEvidence {
-                relationship_id,
-                observation_id: Uuid::now_v7(),
-                source_lineage_id: "flow:p1_account".to_owned(),
-                support_role: RelationshipSupportRole::Supporting,
-                valid_from: Some(at),
-                valid_until: relationship.valid_until,
-            },
-            RelationshipEvidence {
-                relationship_id,
-                observation_id: Uuid::now_v7(),
-                source_lineage_id: "flow:p1_account".to_owned(),
-                support_role: RelationshipSupportRole::Supporting,
-                valid_from: Some(at),
-                valid_until: relationship.valid_until,
-            },
-        ];
-        let stored = store
-            .put_entity_relationship(&relationship, &evidence)
+        let installation_id = store
+            .get_or_create_installation_identity()
             .await
-            .expect("relationship");
-        assert_eq!(stored.independent_lineage_count, 1);
-        let replay = store
-            .put_entity_relationship(&relationship, &evidence)
-            .await
-            .expect("relationship replay");
-        assert_eq!(replay, stored);
-
-        let mut wider_relationship = relationship.clone();
-        wider_relationship.valid_from = at - chrono::Duration::minutes(5);
-        wider_relationship.valid_until = Some(at + chrono::Duration::minutes(10));
-        let widened = store
-            .put_entity_relationship(&wider_relationship, &evidence)
-            .await
-            .expect("same-revision relationship extends time window");
-        assert_eq!(widened.valid_from, wider_relationship.valid_from);
-        assert_eq!(widened.valid_until, wider_relationship.valid_until);
-
-        let shorter_replay = store
-            .put_entity_relationship(&relationship, &evidence)
-            .await
-            .expect("same-revision replay cannot shrink time window");
-        assert_eq!(shorter_replay.valid_until, wider_relationship.valid_until);
-
-        let mut indefinite_same_revision = relationship.clone();
-        indefinite_same_revision.valid_until = None;
-        let bounded = store
-            .put_entity_relationship(&indefinite_same_revision, &evidence)
-            .await
-            .expect("same-revision replay cannot erase a bounded expiry");
-        assert_eq!(bounded.valid_until, wider_relationship.valid_until);
-
-        let mut corroborated = evidence;
-        corroborated.push(RelationshipEvidence {
-            relationship_id,
+            .unwrap()
+            .installation_id;
+        let connectors = [Uuid::now_v7(), Uuid::now_v7()];
+        for connector in connectors {
+            store
+                .register_connector(
+                    installation_id,
+                    connector,
+                    &tally_connectors::litellm_model_groups_api_descriptor(),
+                )
+                .await
+                .unwrap();
+        }
+        let at = DateTime::from_timestamp_micros(Utc::now().timestamp_micros()).unwrap();
+        let first = ObservedUsage {
             observation_id: Uuid::now_v7(),
-            source_lineage_id: "cloud_activity:p1_account".to_owned(),
-            support_role: RelationshipSupportRole::Supporting,
-            valid_from: Some(at),
-            valid_until: relationship.valid_until,
-        });
-        let stored = store
-            .put_entity_relationship(&relationship, &corroborated)
+            installation_id,
+            provider_key: "openai".into(),
+            provider_name: "OpenAI".into(),
+            provider_category: "direct_provider".into(),
+            provider_country_code: Some("US".into()),
+            provider_catalogued: true,
+            model_reference: Some("gpt-4.1".into()),
+            observed_at: at,
+            connector_instance_id: connectors[0],
+            evidence_kind: FindingEvidenceKind::AiUsage,
+            counts_as_usage: true,
+            endpoints: vec![EndpointIdentity {
+                kind: "hostname".into(),
+                value: "worker.example.test".into(),
+                role: "source".into(),
+                port: None,
+            }],
+            destinations: vec![DestinationIdentity {
+                kind: "hostname".into(),
+                value: "api.openai.com".into(),
+                port: Some(443),
+            }],
+            workloads: vec![WorkloadIdentity {
+                namespace_name: "qa".into(),
+                workload_name: "agent".into(),
+                workload_kind: "deployment".into(),
+                runtime_image: None,
+            }],
+            user_identity: Some(UserIdentity {
+                kind: "email".into(),
+                value: "person@example.test".into(),
+                email: Some("person@example.test".into()),
+            }),
+            request_client: Some(RequestClientObservation {
+                name: Some(RequestClientKind::LangChain),
+                agent_id: Some("shared-agent".into()),
+            }),
+        };
+        let second = ObservedUsage {
+            observation_id: Uuid::now_v7(),
+            connector_instance_id: connectors[1],
+            observed_at: at + chrono::Duration::minutes(5),
+            ..first.clone()
+        };
+        let finding_id = store.record_usage(&first).await.unwrap();
+        assert_eq!(store.record_usage(&second).await.unwrap(), finding_id);
+        // Replays from either connector must neither count again nor duplicate context.
+        store
+            .record_usages(&[second.clone(), first.clone(), second.clone()])
             .await
-            .expect("corroborated relationship");
-        assert_eq!(stored.independent_lineage_count, 2);
-        let listed = store
-            .list_entity_relationships(installation_id, Some(workload.entity_id), 10, 0)
+            .unwrap();
+        store.migrate().await.unwrap();
+        let findings = store.list_governance_findings(100).await.unwrap();
+        let finding = findings
+            .iter()
+            .find(|f| f.finding_id == finding_id)
+            .unwrap();
+        assert_eq!(finding.usage_count, 2);
+        assert_eq!(
+            finding.clients.len(),
+            2,
+            "client identity remains scoped to its connector"
+        );
+        for connector in connectors {
+            assert!(
+                finding
+                    .clients
+                    .iter()
+                    .any(|client| client.connector_instance_id == connector
+                        && client.agent_id.as_deref() == Some("shared-agent"))
+            );
+        }
+        assert_eq!(finding.endpoints.len(), 1);
+        assert_eq!(finding.destinations.len(), 1);
+        assert_eq!(finding.users.len(), 1);
+        let window: (DateTime<Utc>, DateTime<Utc>, i64) = sqlx::query_as(
+            "SELECT min(first_seen), max(last_seen), count(*) FROM finding_workloads WHERE finding_id=$1"
+        ).bind(finding_id).fetch_one(store.pool()).await.unwrap();
+        assert_eq!(window, (at, second.observed_at, 1));
+        // A later bad source must roll back the entire batch, including its earlier row.
+        let fresh = ObservedUsage {
+            observation_id: Uuid::now_v7(),
+            ..first.clone()
+        };
+        let invalid = ObservedUsage {
+            observation_id: Uuid::now_v7(),
+            connector_instance_id: Uuid::now_v7(),
+            ..second
+        };
+        assert!(store.record_usages(&[fresh, invalid]).await.is_err());
+        let count: i64 = sqlx::query_scalar("SELECT usage_count FROM findings WHERE finding_id=$1")
+            .bind(finding_id)
+            .fetch_one(store.pool())
             .await
-            .expect("list relationships");
-        assert_eq!(listed, vec![stored]);
-
-        sqlx::query("DELETE FROM entity_relationships WHERE installation_id = $1")
-            .bind(installation_id)
-            .execute(&store.pool)
+            .unwrap();
+        assert_eq!(count, 2);
+        sqlx::query("DELETE FROM connector_states WHERE connector_instance_id=$1")
+            .bind(connectors[0])
+            .execute(store.pool())
             .await
-            .expect("delete relationships");
-        sqlx::query("DELETE FROM entity_keys WHERE installation_id = $1")
-            .bind(installation_id)
-            .execute(&store.pool)
-            .await
-            .expect("delete keys");
-        sqlx::query("DELETE FROM entities WHERE entity_id = ANY($1)")
-            .bind([workload.entity_id, system.entity_id])
-            .execute(&store.pool)
-            .await
-            .expect("delete entities");
+            .unwrap();
+        let findings = store.list_governance_findings(100).await.unwrap();
+        let finding = findings
+            .iter()
+            .find(|f| f.finding_id == finding_id)
+            .unwrap();
+        assert_eq!(finding.usage_count, 2);
+        assert_eq!(finding.clients.len(), 1);
+        assert_eq!(finding.clients[0].connector_instance_id, connectors[1]);
     }
 
     #[test]
@@ -9852,7 +9851,11 @@ mod tests {
         let store = PostgresStore::connect(&url).await.expect("connect");
         store.migrate().await.expect("migrate");
 
-        let installation_id = Uuid::now_v7();
+        let installation_id = store
+            .get_or_create_installation_identity()
+            .await
+            .expect("fixture installation")
+            .installation_id;
         let connector_instance_id = Uuid::now_v7();
         let job_id = Uuid::now_v7();
         let descriptor = ConnectorDescriptor {

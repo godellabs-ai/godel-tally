@@ -3864,11 +3864,38 @@ fn connector_schedule_source(
     connector_schedule_source_with_existing(source, None)
 }
 
+/// Operator-entered addresses a connector will contact. Vendor origins that Tally fixes
+/// itself (Azure, Google, Cato, Netskope and so on) are not listed.
+fn operator_destination(source: &ConnectorScheduleSourceInput) -> Option<&str> {
+    match source {
+        ConnectorScheduleSourceInput::ManagedAgents { base_url, .. }
+        | ConnectorScheduleSourceInput::LitellmApi { base_url, .. } => Some(base_url),
+        ConnectorScheduleSourceInput::KubernetesApi { api_url, .. } => Some(api_url),
+        ConnectorScheduleSourceInput::CloudflareZeroTrustGateway { endpoint_url, .. } => {
+            Some(endpoint_url)
+        }
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn connector_schedule_source_with_existing(
     source: &ConnectorScheduleSourceInput,
     existing_credentials: Option<&BTreeMap<String, String>>,
 ) -> Result<ConnectorSchedulePlan, ApiError> {
+    if operator_destination(source)
+        .and_then(|value| Url::parse(value).ok())
+        .and_then(|url| {
+            url.host_str()
+                .map(tally_connectors::forbidden_destination_host)
+        })
+        == Some(true)
+    {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "connector_destination_forbidden",
+        ));
+    }
     match source {
         ConnectorScheduleSourceInput::NextdnsApi {
             profile_id,
@@ -5202,7 +5229,13 @@ fn normalize_import(
             "connector_friendly_name_invalid",
         ));
     }
-    if request.data.is_empty() || request.data.len() > MAX_IMPORT_BYTES {
+    if request.data.trim().is_empty() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "import_empty",
+        ));
+    }
+    if request.data.len() > MAX_IMPORT_BYTES {
         return Err(ApiError::new(
             StatusCode::PAYLOAD_TOO_LARGE,
             "import_size_invalid",

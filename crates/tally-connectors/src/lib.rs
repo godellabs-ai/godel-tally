@@ -233,6 +233,54 @@ fn hash_field(hasher: &mut Sha256, value: &[u8]) {
     hasher.update(value);
 }
 
+/// Hosts no connector may contact, whatever an operator enters: link-local addresses (where
+/// cloud instance-metadata services answer), unspecified and broadcast addresses, and the
+/// well-known metadata host names. Private and loopback addresses stay allowed because
+/// self-hosted sources legitimately live there.
+#[must_use]
+pub fn forbidden_destination_host(host: &str) -> bool {
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if matches!(
+        host.as_str(),
+        "metadata"
+            | "metadata.google.internal"
+            | "metadata.goog"
+            | "instance-data"
+            | "instance-data.ec2.internal"
+            | "metadata.azure.com"
+    ) {
+        return true;
+    }
+    let Ok(address) = host.parse::<std::net::IpAddr>() else {
+        return false;
+    };
+    let address = match address {
+        std::net::IpAddr::V6(v6) => v6
+            .to_ipv4_mapped()
+            .map_or(std::net::IpAddr::V6(v6), std::net::IpAddr::V4),
+        v4 @ std::net::IpAddr::V4(_) => v4,
+    };
+    match address {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                // Alibaba Cloud's metadata service is outside the link-local range.
+                || v4.octets() == [100, 100, 100, 200]
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_unspecified()
+                || v6.is_unicast_link_local()
+                // AWS instance metadata over IPv6.
+                || v6.segments() == [0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254]
+        }
+    }
+}
+
 /// Non-secret capability contract for the generic DNS file connector.
 ///
 /// Every admission path registers its connector so the run ledger and the connector card have a
@@ -538,6 +586,44 @@ pub enum ConnectorError {
     InvalidRecord(&'static str),
     #[error("observation sink is unavailable")]
     SinkUnavailable,
+}
+
+#[cfg(test)]
+mod destination_tests {
+    use super::forbidden_destination_host;
+
+    #[test]
+    fn metadata_and_link_local_destinations_are_forbidden() {
+        for host in [
+            "169.254.169.254",
+            "[fe80::1]",
+            "[fd00:ec2::254]",
+            "0.0.0.0",
+            "[::]",
+            "255.255.255.255",
+            "100.100.100.200",
+            "metadata.google.internal",
+            "METADATA.GOOGLE.INTERNAL.",
+            "[::ffff:169.254.169.254]",
+        ] {
+            assert!(forbidden_destination_host(host), "{host}");
+        }
+    }
+
+    #[test]
+    fn self_hosted_destinations_stay_allowed() {
+        for host in [
+            "127.0.0.1",
+            "localhost",
+            "[::1]",
+            "10.0.0.5",
+            "192.168.1.20",
+            "n8n.internal.example",
+            "api.openai.com",
+        ] {
+            assert!(!forbidden_destination_host(host), "{host}");
+        }
+    }
 }
 
 #[cfg(test)]

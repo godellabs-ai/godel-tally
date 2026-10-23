@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Brand } from "@/components/brand";
+import { safeReturnPath } from "@/lib/session";
 
-type Status = { first_user_registration_open: boolean; email_configured: boolean };
+type Status = { first_user_registration_open: boolean; email_configured: boolean; user?: SignedIn | null };
 type SignedIn = { email: string; display_name: string };
+
+/** Where to return after signing in: a same-origin path only, never another site. */
+function safeNext() {
+  return safeReturnPath(new URLSearchParams(window.location.search).get("next"), window.location.origin);
+}
 
 export default function SignInPage() {
   const router = useRouter();
@@ -21,29 +27,31 @@ export default function SignInPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [resumed, setResumed] = useState(false);
 
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
       const token = new URLSearchParams(window.location.hash.slice(1)).get("invite");
       if (token && /^[a-f0-9]{64}$/.test(token)) { setInvite(token); setRegister(true); history.replaceState(null, "", "/signin"); }
+      setResumed(new URLSearchParams(window.location.search).has("next"));
     }, 0);
-    void fetch("/api/v1/auth/me", { cache: "no-store" })
-      .then(response => response.ok ? response.json() as Promise<{ user: SignedIn }> : null)
-      .then(body => { if (active && body) setSignedIn(body.user); })
-      .catch(() => {});
+    let retry = 0;
     const loadStatus = () => {
       void fetch("/api/v1/auth/status", { cache: "no-store", signal: AbortSignal.timeout(4000) })
         .then(response => { if (!response.ok) throw new Error("Authentication unavailable"); return response.json(); })
         .then((value: Status) => {
           if (!active) return;
+          // Status only needs retrying while authentication is unreachable.
+          window.clearInterval(retry);
+          setSignedIn(value.user ?? null);
           setStatus(value); setError(current => current === "Tally authentication is unavailable. Retrying…" ? "" : current);
           if (value.first_user_registration_open) setRegister(true);
         })
         .catch(() => { if (active) setError("Tally authentication is unavailable. Retrying…"); });
     };
     loadStatus();
-    const retry = window.setInterval(() => { if (active) loadStatus(); }, 6000);
+    retry = window.setInterval(() => { if (active) loadStatus(); }, 6000);
     return () => { active = false; window.clearTimeout(timer); window.clearInterval(retry); };
   }, []);
 
@@ -66,7 +74,7 @@ export default function SignInPage() {
       if (!session.ok) throw new Error(register
         ? "Your account was created, but Tally could not confirm your session. Try signing in."
         : "Tally could not confirm your session. Please try signing in again.");
-      router.replace("/"); router.refresh();
+      router.replace(safeNext()); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign in failed"); }
     finally { setBusy(false); }
   }
@@ -91,12 +99,13 @@ export default function SignInPage() {
         <p className="mt-2 text-sm text-muted-foreground">Signed in as {signedIn.display_name} ({signedIn.email}).{invite ? " Sign out to accept this invitation with another account." : ""}</p>
         {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
         <div className="mt-6 space-y-3">
-          {!invite && <button type="button" onClick={() => { router.replace("/"); router.refresh(); }} className={`${button} bg-primary text-primary-foreground`}>Continue to Tally</button>}
+          {!invite && <button type="button" onClick={() => { router.replace(safeNext()); router.refresh(); }} className={`${button} bg-primary text-primary-foreground`}>Continue to Tally</button>}
           <button type="button" onClick={() => void signOut()} disabled={busy} className={`${button} border border-border`}>Sign out</button>
         </div>
       </> : <>
         <h1 className="mt-8 text-2xl font-bold">{first ? "Create the first Tally administrator" : register ? "Accept your Tally invitation" : "Sign in to Tally"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{first ? "The first account is the Tally administrator and invites everyone else." : register ? "Use the email address on your invitation." : "Enter your email and password."}</p>
+        {resumed && !signedIn && <p role="status" className="mt-3 rounded-md bg-primary/10 p-3 text-sm">Your session ended. Sign in to continue where you left off.</p>}
         <form onSubmit={submit} className="mt-6 space-y-4">
           {register && <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium">First name<input required maxLength={100} value={firstName} onChange={e => setFirstName(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background p-2" autoComplete="given-name" /></label>

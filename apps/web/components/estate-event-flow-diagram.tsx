@@ -897,7 +897,7 @@ export function EventFlowDiagram({
         }
         .flow-txt span {
           display: block;
-          font-size: 10px;
+          font-size: 12px;
           color: var(--muted-foreground);
           margin-top: 2px;
           font-weight: 500;
@@ -1054,11 +1054,11 @@ export function EventFlowDiagram({
             className="absolute flex flex-col items-center pointer-events-none z-20"
             style={{ left: cx - 100, top: 28, width: 200 }}
           >
-            {col.id === "Authorization" && onAuthorizationColumnClick ? <button type="button" onClick={event => { event.stopPropagation(); onAuthorizationColumnClick(); }} className={`pointer-events-auto flex items-center gap-2 rounded px-2 py-1 text-[11px] font-bold tracking-wider hover:bg-primary/10 ${style.color}`}>
+            {col.id === "Authorization" && onAuthorizationColumnClick ? <button type="button" onClick={event => { event.stopPropagation(); onAuthorizationColumnClick(); }} className={`pointer-events-auto flex items-center gap-2 rounded px-2 py-1 text-xs font-bold tracking-wider hover:bg-primary/10 ${style.color}`}>
               <Icon className="size-4 shrink-0" strokeWidth={2.5}/>{col.label}
             </button> : <div className="flex items-center gap-2">
               <Icon className={`size-4 shrink-0 ${style.color}`} strokeWidth={2.5} />
-              <span className={`text-[11px] font-bold tracking-wider ${style.color}`}>
+              <span className={`text-xs font-bold tracking-wider ${style.color}`}>
                 {col.label}
               </span>
             </div>}
@@ -1093,7 +1093,7 @@ export function EventFlowDiagram({
                 scrollRefs.current[i]?.scrollTo({ top: 0, behavior: "instant" });
                 setScrollOffsets(offsets => offsets.map((offset, index) => index === i ? 0 : offset));
               }}
-              className="w-full bg-transparent border-none rounded-none px-0.5 py-0.5 text-[11px] focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/60"
+              className="w-full bg-transparent border-none rounded-none px-0.5 py-0.5 text-xs focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/60"
             />
           </div>
         );
@@ -1325,7 +1325,7 @@ export function EventFlowDiagram({
                           </div>
                           <div className="flow-txt">
                             <strong className="truncate text-xs font-semibold text-foreground">{node.name}</strong>
-                            <span className="truncate text-[10px] text-muted-foreground font-medium">{nodeCount(node)}</span>
+                            <span className="truncate text-xs text-muted-foreground font-medium">{nodeCount(node)}</span>
                           </div>
                         </>
                       ) : (
@@ -1339,7 +1339,7 @@ export function EventFlowDiagram({
                           </div>
                           <div className="flow-txt center">
                             <strong className="truncate text-xs font-semibold text-foreground w-full">{node.name}</strong>
-                            <span className="text-[10px] text-muted-foreground font-medium">{nodeCount(node)}</span>
+                            <span className="text-xs text-muted-foreground font-medium">{nodeCount(node)}</span>
                           </div>
                         </>
                       )}
@@ -1362,7 +1362,7 @@ export function EventFlowDiagram({
                   type="button"
                   aria-label={`Show more ${columnHeaders[colIdx].label.toLowerCase()}`}
                   onClick={event => { event.stopPropagation(); scrollRefs.current[colIdx]?.scrollBy({ top: colHeight, behavior: "instant" }); }}
-                  className="absolute text-[10px] font-bold text-muted-foreground bg-muted/60 border border-border/80 px-2.5 py-1 rounded-full hover:bg-muted hover:text-foreground"
+                  className="absolute text-xs font-bold text-muted-foreground bg-muted/60 border border-border/80 px-2.5 py-1 rounded-full hover:bg-muted hover:text-foreground"
                   style={{
                     left: cx - 45,
                     top: PADDING.top + colHeight + 4,

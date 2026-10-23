@@ -85,7 +85,14 @@ pub fn serve(method: &Method, uri: &Uri) -> Response {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
     let Some((bytes, mime)) = asset(uri.path()) else {
-        return StatusCode::NOT_FOUND.into_response();
+        let page = !uri.path().starts_with("/api/")
+            && !uri.path().starts_with("/_next/")
+            && !uri.path().rsplit('/').next().unwrap_or("").contains('.');
+        return if page {
+            not_found(method)
+        } else {
+            StatusCode::NOT_FOUND.into_response()
+        };
     };
     let cache = if uri.path().starts_with("/_next/static/") {
         "public, max-age=31536000, immutable"
@@ -96,6 +103,29 @@ pub fn serve(method: &Method, uri: &Uri) -> Response {
         .header(header::CONTENT_TYPE, mime)
         .header(header::CACHE_CONTROL, cache)
         .header("x-content-type-options", "nosniff")
+        .header(header::CONTENT_LENGTH, bytes.len())
+        .body(if *method == Method::HEAD {
+            Body::empty()
+        } else {
+            Body::from(bytes)
+        })
+        .unwrap()
+}
+
+/// Unknown pages get the console's own "page not found" document instead of an empty body.
+/// Missing build assets and API paths keep a bare 404.
+fn not_found(method: &Method) -> Response {
+    let Some((bytes, mime)) = ASSETS
+        .iter()
+        .find(|(name, _)| *name == "404.html")
+        .map(|(name, bytes)| (*bytes, content_type(name)))
+    else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .header(header::CONTENT_TYPE, mime)
+        .header(header::CACHE_CONTROL, "no-cache")
         .header(header::CONTENT_LENGTH, bytes.len())
         .body(if *method == Method::HEAD {
             Body::empty()
