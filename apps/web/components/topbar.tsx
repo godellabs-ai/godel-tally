@@ -13,7 +13,6 @@ import { isAuthPage, useCurrentUser } from "@/lib/current-user";
 const routes = [
   ["/", "Overview", "AI findings, authorization decisions and connections across your estate.", LayoutDashboard],
   ["/connectors", "Connectors", "Add and manage discovery sources.", Cable],
-  ["/inventory", "People & devices", "Users and devices observed across your discovery sources.", Users],
   ["/registry", "AI Registry", "Manage provider and model sanctions.", Bot],
   ["/upgrade", "Upgrade", "Upgrade this Tally installation to Gödel Gate.", ArrowUpCircle],
   ["/audit", "Audit logs", "Administrative and operational changes.", ClipboardClock],

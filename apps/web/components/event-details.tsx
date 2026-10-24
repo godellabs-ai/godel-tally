@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FindingActivity } from "./finding-activity";
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, ChevronDown, Copy, Globe, Laptop, Plug, ShieldCheck, ShieldQuestion, ShieldX, UserRound } from "lucide-react";
@@ -65,7 +64,6 @@ function EventDetailsBody({ row, onInvestigate }: { row: EventRow; onInvestigate
       <Section title="Process & attribution">
         <dl>{field("Executable",e.process?.executable,true,true)}{field("Process ID",e.process?.pid,true)}{field("Native process ID",e.process?.unique_id,true)}{field("Process started",e.process?.started_at ? formatDateTime(e.process.started_at) : undefined)}{field("Parent executable",e.process?.parent_executable,true)}{field("Parent process ID",e.process?.parent_pid,true)}{field("Parent native ID",e.process?.parent_unique_id,true)}{field("User role",e.inventory?.user_role ? eventLabel(e.inventory.user_role) : "Source-reported association")}</dl>
         <p className="mt-2 text-xs text-muted-foreground">Client hints and assigned owners do not establish the initiating executable or request actor.</p>
-        {e.actor?.hostname && <Link href={`/inventory?q=${encodeURIComponent(e.actor.hostname)}`} className="mt-2 block text-xs text-primary underline">View device inventory</Link>}
       </Section>
       {row.findings[0] && <section data-drawer-section="Linked attribution"><FindingActivity findingId={row.findings[0].finding_id} observationId={e.observation_id}/></section>}
       <Section title="AI service & destination">

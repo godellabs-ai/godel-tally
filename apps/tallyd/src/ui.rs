@@ -81,6 +81,10 @@ fn content_type(name: &str) -> &'static str {
 }
 
 pub fn serve(method: &Method, uri: &Uri) -> Response {
+    // Unregistered API routes remain missing for every method, including removed mutations.
+    if uri.path().starts_with("/api/") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     if *method != Method::GET && *method != Method::HEAD {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
@@ -184,6 +188,12 @@ mod tests {
         for path in ["/api/missing", "/missing.js", "/../index.html"] {
             assert_eq!(
                 serve(&Method::GET, &path.parse().unwrap()).status(),
+                StatusCode::NOT_FOUND
+            );
+        }
+        for method in [Method::GET, Method::POST, Method::DELETE] {
+            assert_eq!(
+                serve(&method, &"/api/missing".parse().unwrap()).status(),
                 StatusCode::NOT_FOUND
             );
         }

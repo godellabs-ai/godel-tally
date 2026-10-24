@@ -865,66 +865,6 @@
         }
       }
     },
-    "/api/v1/tally/inventory": {
-      "get": {
-        "tags": [
-          "identity"
-        ],
-        "operationId": "inventory",
-        "responses": {
-          "200": {
-            "description": "Source-evidenced device and user inventory"
-          }
-        }
-      }
-    },
-    "/api/v1/tally/inventory/corrections": {
-      "post": {
-        "tags": [
-          "identity"
-        ],
-        "operationId": "correct",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Correction"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Reversible identity correction"
-          }
-        }
-      }
-    },
-    "/api/v1/tally/inventory/corrections/{correction_id}/undo": {
-      "post": {
-        "tags": [
-          "identity"
-        ],
-        "operationId": "undo",
-        "parameters": [
-          {
-            "name": "correction_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Undo an identity correction"
-          }
-        }
-      }
-    },
     "/api/v1/tally/overview": {
       "get": {
         "tags": [],
@@ -2828,28 +2768,6 @@
             "minimum": 0
           }
         }
-      },
-      "Correction": {
-        "type": "object",
-        "required": [
-          "subject_id",
-          "target_id",
-          "reason"
-        ],
-        "properties": {
-          "reason": {
-            "type": "string"
-          },
-          "subject_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "target_id": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "additionalProperties": false
       },
       "DataInventory": {
         "type": "object",

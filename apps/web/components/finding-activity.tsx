@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { formatDateTime } from "../lib/datetime";
@@ -58,9 +57,8 @@ export function FindingActivity({ findingId, observationId }: { findingId: strin
       </dl>
       {item.source_revisions?.some(revision=>revision.conflicts.length>0)&&<p className="text-xs text-destructive">Source revisions disagree. Review the evidence before relying on this attribution.</p>}
       {item.enrichment?.process && <p className="text-xs text-muted-foreground">Process enrichment: {item.enrichment.process.status} · {item.enrichment.process.process?.executable ?? "Unresolved"} · {item.enrichment.process.reason}</p>}
-      {item.enrichment && <div className="rounded border p-2 text-muted-foreground"><p>Inventory: {item.enrichment.device.status} · {item.enrichment.device.hostname ?? "No canonical device label"}</p><p>{item.enrichment.device.reason}</p>{item.enrichment.related_users.map(user => <p key={`${user.user_id}:${user.role}:${user.connector_instance_id}:${user.observation_id}`}>{user.role.replaceAll("_", " ")}: <Link href={`/inventory?kind=user&q=${user.user_id}`} className="underline">{user.user_id}</Link> · supporting relationship, not a request actor</p>)}</div>}
+      {item.enrichment && <div className="rounded border p-2 text-muted-foreground"><p>Inventory: {item.enrichment.device.status} · {item.enrichment.device.hostname ?? "No canonical device label"}</p><p>{item.enrichment.device.reason}</p>{item.enrichment.related_users.map(user => <p key={`${user.user_id}:${user.role}:${user.connector_instance_id}:${user.observation_id}`}>{user.role.replaceAll("_", " ")}: {user.user_id} · supporting relationship, not a request actor</p>)}</div>}
       {item.agent.attribution_basis && <p className="text-muted-foreground">{item.agent.attribution_confidence ?? "Source-reported"}: {item.agent.attribution_basis}</p>}
-      {item.actor.hostname && <Link href={`/inventory?q=${encodeURIComponent(item.actor.hostname)}`} className="text-primary underline">View device inventory</Link>}
       <details><summary className="cursor-pointer">Source evidence</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify({ observation_id: item.observation_id, connector: item.connector, receipt: item.source, field_evidence: item.fields, source_revisions:item.source_revisions }, null, 2)}</pre></details>
     </article>)}
     {loading && <p role="status" className="text-xs text-muted-foreground">Loading activity…</p>}

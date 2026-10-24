@@ -1438,9 +1438,6 @@ pub async fn require_session(
 /// data removal), connector credentials and configuration, bulk imports and backfills.
 /// Members read the estate, run scans and syncs, and record governance decisions.
 fn admin_only(method: &Method, path: &str) -> bool {
-    if path.starts_with("/api/v1/tally/inventory/corrections") {
-        return true;
-    }
     let Some(route) = path.strip_prefix("/api/v1/tally/") else {
         return false;
     };

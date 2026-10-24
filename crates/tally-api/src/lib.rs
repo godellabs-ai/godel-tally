@@ -336,18 +336,9 @@ pub fn routes(state: AppState) -> Router {
             "/api/v1/tally/findings/{finding_id}/activity",
             get(identity::activity),
         )
-        .route("/api/v1/tally/inventory", get(identity::inventory))
         .route(
             "/api/v1/tally/connectors/capabilities",
             get(identity::capabilities),
-        )
-        .route(
-            "/api/v1/tally/inventory/corrections",
-            post(identity::correct),
-        )
-        .route(
-            "/api/v1/tally/inventory/corrections/{correction_id}/undo",
-            post(identity::undo),
         )
         .route(
             "/api/v1/tally/event-stream",
@@ -10509,7 +10500,7 @@ pub enum OverviewState {
         version = "0.1.4"
     ),
     paths(
-        identity::capabilities, identity::inventory, identity::activity, identity::correct, identity::undo,
+        identity::capabilities, identity::activity,
         estate::inventory,
         estate::activity,
         event_stream::event_stream,
@@ -11357,9 +11348,6 @@ mod tests {
         let document = serde_json::to_value(openapi()).expect("OpenAPI JSON");
         let paths = document["paths"].as_object().expect("OpenAPI paths");
         let expected = [
-            "/api/v1/tally/inventory",
-            "/api/v1/tally/inventory/corrections",
-            "/api/v1/tally/inventory/corrections/{correction_id}/undo",
             "/api/v1/tally/findings/{finding_id}/activity",
             "/api/v1/tally/connectors/capabilities",
             "/api/v1/tally/estate",
@@ -11403,6 +11391,11 @@ mod tests {
         assert!(encoded.contains("findings_updated"));
         assert!(!paths.contains_key("/api/v1/tally/registry/decisions"));
         assert!(!paths.contains_key("/api/v1/tally/estate/logs"));
+        assert!(
+            paths
+                .keys()
+                .all(|path| !path.starts_with("/api/v1/tally/inventory"))
+        );
         let sanction_schema = &document["components"]["schemas"]["RegistrySanctionRequest"];
         assert_eq!(
             sanction_schema["required"],

@@ -302,7 +302,7 @@ deletion screen uses the same target → preview → confirmation flow in both p
 
 The finding drawer keeps each event's user, device, process, agent signature, client hint and model together, with source receipts and per-field provenance. Missing fields stay unavailable. Independent finding summaries are never combined into invented request chains. Later source revisions can fill missing context; conflicting values remain reviewable.
 
-**People & devices** records minimal identity facts before AI admission, including non-AI endpoint evidence. Inventory does not require MDM and does not add AI usage. It preserves typed user roles, scoped device identifiers, IPv4/IPv6 address roles, source report times, snapshot times and history. Native IDs are scoped to installation, connector and tenant. Explicit matching Entra tenant/device IDs can reconcile Defender and Intune. Hostnames, serials, public IPs and differently hashed source IDs never cause automatic merges. IP-only candidates remain ambiguous, even if the local inventory contains one matching device. Process enrichment requires the same scoped endpoint and native process ID, or PID with exact start time; an owner is never promoted to request actor.
+**Connector identity correlation** records minimal identity facts before AI admission, including non-AI endpoint evidence. Inventory does not require MDM and does not add AI usage. It preserves typed user roles, scoped device identifiers, IPv4/IPv6 address roles, source report times, snapshot times and history. Native IDs are scoped to installation, connector and tenant. Explicit matching Entra tenant/device IDs can reconcile Defender and Intune. Hostnames, serials, public IPs and differently hashed source IDs never cause automatic merges. IP-only candidates remain ambiguous, even if the local inventory contains one matching device. Process enrichment requires the same scoped endpoint and native process ID, or PID with exact start time; an owner is never promoted to request actor.
 
 For **Microsoft Defender on macOS**, successful Graph authentication alone does not establish
 endpoint readiness. Approve the Endpoint Security and Network extensions and Full Disk Access,
@@ -319,7 +319,7 @@ The connector job's `backfill/preview` and `backfill` APIs support a 60–604800
 preserving existing evidence. Replaying source records can restore executable names discarded
 by an older parser; the migration alone cannot reconstruct fields that were never retained.
 
-Administrators can merge same-kind identities with a reason and undo that correction. Source facts remain intact. Historical re-enrichment uses durable, bounded generations, exposes its cursor/status, and does not increment usage. Disabled or removed sources stop contributing derived context. Existing aggregate findings retain their labels; their original event associations cannot be reconstructed retroactively.
+Source facts remain intact. Historical re-enrichment uses durable, bounded generations and does not increment usage. Disabled or removed sources stop contributing derived context. Existing aggregate findings retain their labels; their original event associations cannot be reconstructed retroactively.
 
 Read-only MDM sources are available in the connector catalog:
 
