@@ -28,14 +28,20 @@ impl ProcessObservation {
         self == &Self::default()
     }
 
-    /// Retain an executable basename only. Never persist command arguments or personal paths.
+    /// Read an executable-path field, never a command-line field. Strip personal paths and
+    /// reject control characters, shell syntax and option-like arguments. Spaces and parentheses
+    /// are legitimate parts of macOS/Windows executable names.
     pub fn executable_basename(value: &str) -> Option<String> {
         let name = value.rsplit(['/', '\\']).next()?;
         (!name.is_empty()
             && name.len() <= 128
+            && name.trim() == name
+            && !value.contains(" -")
+            && !value.chars().any(char::is_control)
+            && name.chars().any(char::is_alphanumeric)
             && name
                 .chars()
-                .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_')))
+                .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ' | '(' | ')')))
         .then(|| name.to_owned())
     }
 }
@@ -319,5 +325,31 @@ mod tests {
             None
         );
         assert_eq!(ProcessObservation::executable_basename("evil\nname"), None);
+        for name in [
+            "microsoft edge helper",
+            "code helper (plugin)",
+            "Microsoft Edge.exe",
+        ] {
+            assert_eq!(
+                ProcessObservation::executable_basename(name).as_deref(),
+                Some(name)
+            );
+        }
+        assert_eq!(
+            ProcessObservation::executable_basename(
+                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+            ),
+            Some("Microsoft Edge".into())
+        );
+        for value in [
+            "node -e secret",
+            "name;secret",
+            "$(secret)",
+            " name",
+            "name\tsecret",
+            "..",
+        ] {
+            assert_eq!(ProcessObservation::executable_basename(value), None);
+        }
     }
 }

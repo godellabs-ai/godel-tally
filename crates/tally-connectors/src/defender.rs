@@ -288,7 +288,9 @@ pub fn import_microsoft_defender_json(
                 .process_unique_id
                 .as_deref()
                 .filter(|v| {
-                    v.len() <= 128
+                    !v.is_empty()
+                        && !v.bytes().all(|b| b == b'0')
+                        && v.len() <= 128
                         && v.bytes()
                             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':'))
                 })
@@ -539,7 +541,9 @@ fn enrich_agent(o: &mut Observation, event: &DefenderEvent, config: &VendorImpor
     o.actor.source_ip = event
         .source_ip
         .as_deref()
-        .and_then(|s| IpAddress::parse(s).ok());
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        .filter(|ip| !ip.is_unspecified())
+        .and_then(|ip| IpAddress::parse(&ip.to_string()).ok());
     o.service.source_category = Some(format!("defender:{table}"));
 }
 
@@ -747,6 +751,56 @@ mod tests {
             received_at: "2026-09-07T10:01:00Z".parse().expect("timestamp"),
             checkpoint: Cursor("defender:123".to_owned()),
             pseudonymization_key: PseudonymizationKey::new(&[7_u8; 32]).expect("key"),
+        }
+    }
+
+    #[test]
+    fn macos_process_names_survive_but_placeholder_ids_and_addresses_do_not() {
+        for (unique, ip, expected_ip) in [
+            ("0", "0.0.0.0", None),
+            ("000", "::", None),
+            ("123", "192.168.0.42", Some("192.168.0.42")),
+        ] {
+            let input = serde_json::json!({"records":[{"category":"AdvancedHunting-DeviceNetworkEvents","properties":{
+                "Timestamp":"2026-10-24T12:44:00Z", "ReportId":123,
+                "DeviceId":"device1", "DeviceName":"macbook", "RemoteUrl":"https://chat.z.ai",
+                "InitiatingProcessFileName":"microsoft edge helper", "InitiatingProcessParentFileName":"Microsoft Edge",
+                "InitiatingProcessId":42, "InitiatingProcessUniqueId":unique,
+                "InitiatingProcessCreationTime":"2026-10-24T12:43:00Z", "LocalIP":ip,
+                "InitiatingProcessAccountUpn":"", "InitiatingProcessAccountName":"ramanan",
+                "InitiatingProcessCommandLine":"must-not-persist --secret canary"
+            }}]});
+            let result =
+                import_defender_stream_json(&serde_json::to_vec(&input).unwrap(), &config())
+                    .unwrap();
+            let o = &result.batch.observations[0];
+            assert_eq!(
+                o.process.executable.as_deref(),
+                Some("microsoft edge helper")
+            );
+            assert_eq!(
+                o.process.parent_executable.as_deref(),
+                Some("Microsoft Edge")
+            );
+            assert_eq!(o.process.pid.as_deref(), Some("42"));
+            assert!(o.process.started_at.is_some());
+            assert_eq!(
+                o.process.unique_id.as_deref(),
+                (unique == "123").then_some("123")
+            );
+            assert_eq!(
+                o.actor.source_ip.as_ref().map(IpAddress::as_str),
+                expected_ip
+            );
+            assert_eq!(
+                o.actor.identity.as_ref().unwrap().source_subject.as_deref(),
+                Some("macbook\\ramanan")
+            );
+            assert_eq!(
+                o.service.vendor_application_id.as_deref(),
+                Some("app.zai.chat")
+            );
+            assert!(!serde_json::to_string(o).unwrap().contains("canary"));
         }
     }
 

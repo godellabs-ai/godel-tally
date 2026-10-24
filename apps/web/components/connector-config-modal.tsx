@@ -39,6 +39,7 @@ import {
 } from "../lib/connector-catalog";
 import { VendorBadge, getVendorFromIdentifier } from "./vendor-icon";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "../lib/datetime";
 
 export type ConnectorSchemaField = {
   name: string;
@@ -1324,10 +1325,13 @@ function ConfiguredConnectorSidebar({
                       <span>{connector.records_read_total.toLocaleString()} records</span>
                     </div>
                     <p className="mt-1.5 text-[10px] text-muted-foreground">
-                      {connector.last_success_at
-                        ? `Last synced ${formatTimeAgo(connector.last_success_at)}`
-                        : "Never synced"}
+                      {connector.last_poll_at
+                        ? `Last checked ${formatTimeAgo(connector.last_poll_at)}`
+                        : "Never checked"}
                     </p>
+                    {connector.polled_through && <p className="mt-1 text-[10px] text-muted-foreground">
+                      History checked through {formatDateTime(connector.polled_through)}
+                    </p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
                     <Button

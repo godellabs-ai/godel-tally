@@ -304,6 +304,21 @@ The finding drawer keeps each event's user, device, process, agent signature, cl
 
 **People & devices** records minimal identity facts before AI admission, including non-AI endpoint evidence. Inventory does not require MDM and does not add AI usage. It preserves typed user roles, scoped device identifiers, IPv4/IPv6 address roles, source report times, snapshot times and history. Native IDs are scoped to installation, connector and tenant. Explicit matching Entra tenant/device IDs can reconcile Defender and Intune. Hostnames, serials, public IPs and differently hashed source IDs never cause automatic merges. IP-only candidates remain ambiguous, even if the local inventory contains one matching device. Process enrichment requires the same scoped endpoint and native process ID, or PID with exact start time; an owner is never promoted to request actor.
 
+For **Microsoft Defender on macOS**, successful Graph authentication alone does not establish
+endpoint readiness. Approve the Endpoint Security and Network extensions and Full Disk Access,
+then verify `mdatp health` reports healthy. Enable Network Protection in audit or block mode to
+collect destination-domain telemetry; see [Microsoft's deployment guidance](https://learn.microsoft.com/en-us/defender-endpoint/network-protection-macos).
+Network connections can establish the contacted AI service and source process, but not the model
+used. Unspecified addresses and unavailable native process IDs are omitted from attribution;
+PID plus creation time identifies the process when a native ID is unavailable.
+
+Defender history is read in windows of up to one day, with five minutes reserved for source
+settling. Windows exceeding the configured row limit are bisected and retried before the cursor
+advances. The connector shows the history boundary even when a window contains no events.
+The connector job's `backfill/preview` and `backfill` APIs support a 60–604800 second replay,
+preserving existing evidence. Replaying source records can restore executable names discarded
+by an older parser; the migration alone cannot reconstruct fields that were never retained.
+
 Administrators can merge same-kind identities with a reason and undo that correction. Source facts remain intact. Historical re-enrichment uses durable, bounded generations, exposes its cursor/status, and does not increment usage. Disabled or removed sources stop contributing derived context. Existing aggregate findings retain their labels; their original event associations cannot be reconstructed retroactively.
 
 Read-only MDM sources are available in the connector catalog:

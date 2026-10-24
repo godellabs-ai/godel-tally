@@ -505,7 +505,7 @@ mod tests {
     fn embedded_registry_passes_digest_and_invariant_verification() {
         let (bundle, manifest) =
             tally_api::embedded_registry().expect("verified embedded registry");
-        assert_eq!(bundle.version, "2026.08.5");
+        assert_eq!(bundle.version, "2026.10.1");
         assert_eq!(bundle.entries.len(), manifest.entry_count);
         assert_eq!(bundle.fingerprints.len(), manifest.fingerprint_count);
         assert_eq!(

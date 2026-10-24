@@ -422,6 +422,7 @@ pub(crate) fn registry_entry_for_label(value: &str) -> Option<&'static str> {
             Some("svc.google.gemini_api")
         }
         _ if host_matches(&raw, "chat.deepseek.com") => Some("app.deepseek.chat"),
+        _ if raw == "chat.z.ai" => Some("app.zai.chat"),
         _ if host_matches(&raw, "api.deepseek.com") => Some("svc.deepseek.api"),
         _ if host_matches(&raw, "api.cohere.com") => Some("svc.cohere.api"),
         _ if host_matches(&raw, "api.mistral.ai") => Some("svc.mistral.api"),
@@ -647,6 +648,9 @@ mod tests {
         assert!(matches!(error, VendorImportError::NoAcceptedRecords));
         assert_eq!(registry_entry_for_label("not-openai.example"), None);
         assert_eq!(registry_entry_for_label("openai.example.invalid"), None);
+        assert_eq!(registry_entry_for_label("chat.z.ai"), Some("app.zai.chat"));
+        assert_eq!(registry_entry_for_label("chat.z.ai.example.invalid"), None);
+        assert_eq!(registry_entry_for_label("docs.z.ai"), None);
     }
 
     #[test]

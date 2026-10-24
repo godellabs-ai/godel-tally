@@ -122,6 +122,8 @@ export interface ConnectorState {
   last_poll_at: string | null;
   last_source_at: string | null;
   lag_seconds: number | null;
+  polled_through?: string | null;
+  backlog_seconds?: number | null;
   records_read_total: number;
   accepted_total: number;
   ignored_total: number;

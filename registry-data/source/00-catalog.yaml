@@ -1,5 +1,5 @@
 schema_version: "1"
-version: 2026.08.5
+version: 2026.10.1
 fingerprints:
   - id: fingerprint.mcp.server_discover_20260728
     ports: [3000, 4000, 8000, 8080]
@@ -125,6 +125,35 @@ fingerprints:
         verified_at: 2026-08-13
         reviewer: godel-tally-maintainers
 entries:
+  - id: provider.zai
+    kind: provider
+    name: Z.ai
+    categories: [ai_provider]
+    surfaces: []
+    status: active
+
+  - id: app.zai.chat
+    kind: product
+    name: Z.ai Chat
+    provider_ref: provider.zai
+    categories: [generative_ai, browser_assistant]
+    surfaces: [browser_application]
+    matchers:
+      - id: host.chat
+        type: host_exact
+        value: chat.z.ai
+        produces:
+          entity_ref: app.zai.chat
+          proof: service_contact
+        confidence_bps: 9900
+        verified_at: 2026-10-24
+        evidence:
+          - source_type: vendor_documentation
+            url: https://chat.z.ai/
+            verified_at: 2026-10-24
+            reviewer: godel-tally-maintainers
+    status: active
+
   - id: provider.anthropic
     kind: provider
     name: Anthropic

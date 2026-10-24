@@ -4,6 +4,7 @@ const productScreens = [
   ["/", "Overview"],
   ["/findings", "Overview"],
   ["/connectors", "Connectors"],
+  ["/inventory", "People & devices"],
   ["/registry", "AI Registry"],
   ["/audit", "Audit logs"],
   ["/settings", "Settings"],
@@ -97,7 +98,7 @@ test("connectors and data removal keep the primary actions close", async ({ page
 });
 
 test("retired product routes are gone", async ({ page }) => {
-  for (const path of ["/discover", "/inventory", "/risk", "/coverage", "/reports", "/scanner"]) {
+  for (const path of ["/discover", "/risk", "/coverage", "/reports", "/scanner"]) {
     const response = await page.goto(path);
     expect(response?.status()).toBe(404);
   }

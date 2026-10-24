@@ -2633,6 +2633,13 @@
             "type": "integer",
             "format": "int64"
           },
+          "backlog_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
           "connector_instance_id": {
             "type": "string",
             "format": "uuid"
@@ -2702,6 +2709,14 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "polled_through": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Last committed history boundary, including empty windows; separate from source freshness."
           },
           "records_read_total": {
             "type": "integer",

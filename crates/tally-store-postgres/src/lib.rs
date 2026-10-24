@@ -160,7 +160,7 @@ const GOVERNANCE_FINDINGS_SQL: &str = r"
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations/postgres");
 
 /// Latest `PostgreSQL` schema version understood by this Tally binary.
-pub const POSTGRES_MIGRATION_HEAD: i64 = 13;
+pub const POSTGRES_MIGRATION_HEAD: i64 = 14;
 
 const RELATIONSHIP_JSON_SELECT: &str = r"
     SELECT jsonb_build_object(
@@ -378,6 +378,7 @@ pub struct EntityResolutionWrite {
 pub enum ConnectorBackfillSourceKind {
     NextdnsApi,
     CloudFlowApi,
+    MicrosoftDefenderApi,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3130,7 +3131,18 @@ impl PostgresStore {
         .await?;
         values
             .into_iter()
-            .map(serde_json::from_value)
+            .map(|value| {
+                serde_json::from_value::<ConnectorStateView>(value).map(|mut state| {
+                    if state.health == ConnectorHealth::Healthy
+                        && state
+                            .backlog_seconds(state.last_poll_at.unwrap_or_else(Utc::now))
+                            .is_some_and(|lag| lag > 60)
+                    {
+                        state.health = ConnectorHealth::Delayed;
+                    }
+                    state
+                })
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
@@ -7982,6 +7994,13 @@ pub fn connector_backfill_capability(
     config_refs: &serde_json::Value,
 ) -> Option<ConnectorBackfillCapability> {
     let kind = config_refs.get("kind")?.as_str()?;
+    if kind == "microsoft_defender_graph_hunting_v1" {
+        return Some(ConnectorBackfillCapability {
+            source_kind: ConnectorBackfillSourceKind::MicrosoftDefenderApi,
+            minimum_lookback_seconds: 60,
+            maximum_lookback_seconds: 604_800,
+        });
+    }
     if kind == "nextdns_api_v1" {
         return Some(ConnectorBackfillCapability {
             source_kind: ConnectorBackfillSourceKind::NextdnsApi,
@@ -8631,6 +8650,25 @@ pub struct ConnectorStateView {
     pub last_error_code: Option<String>,
     pub redaction_digest: Option<String>,
     pub descriptor: serde_json::Value,
+}
+
+impl ConnectorStateView {
+    /// The last fully committed Graph query boundary, including windows containing no events.
+    pub fn polled_through(&self) -> Option<DateTime<Utc>> {
+        if self.connector_type != "microsoft_defender_edr_api_v1" {
+            return None;
+        }
+        self.cursor_value
+            .strip_prefix("microsoft-defender-v1:")
+            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(DateTime::from_timestamp_millis)
+    }
+
+    /// History left to scan, excluding Graph's five-minute settling interval.
+    pub fn backlog_seconds(&self, now: DateTime<Utc>) -> Option<i64> {
+        self.polled_through()
+            .map(|through| ((now - through).num_seconds() - 300).max(0))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -9504,6 +9542,18 @@ mod tests {
         assert!(matches!(
             connector_backfill_preview(&state, 900, at),
             Err(PostgresStoreError::ConnectorBackfillUnsupported)
+        ));
+
+        state.job.config_refs = serde_json::json!({"kind":"microsoft_defender_graph_hunting_v1"});
+        let defender = connector_backfill_preview(&state, 604_800, at).unwrap();
+        assert_eq!(
+            defender.source_kind,
+            ConnectorBackfillSourceKind::MicrosoftDefenderApi
+        );
+        assert_eq!(defender.maximum_lookback_seconds, 604_800);
+        assert!(matches!(
+            connector_backfill_preview(&state, 604_801, at),
+            Err(PostgresStoreError::ConnectorBackfillOutOfRange)
         ));
     }
 

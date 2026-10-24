@@ -284,11 +284,11 @@ pub fn embedded_registry() -> anyhow::Result<(RegistryBundle, RegistryManifest)>
     use anyhow::Context as _;
 
     let manifest = serde_json::from_str::<RegistryManifest>(include_str!(
-        "../../../registry-data/dist/tally-registry-2026.08.5.manifest.json"
+        "../../../registry-data/dist/tally-registry-2026.10.1.manifest.json"
     ))
     .context("parse embedded Tally registry manifest")?;
     let bundle = verify_artifact(
-        include_bytes!("../../../registry-data/dist/tally-registry-2026.08.5.json.zst"),
+        include_bytes!("../../../registry-data/dist/tally-registry-2026.10.1.json.zst"),
         &manifest,
     )
     .context("verify embedded Tally registry artifact")?;
@@ -9982,6 +9982,9 @@ pub struct ConnectorStateResponse {
     pub last_poll_at: Option<DateTime<Utc>>,
     pub last_source_at: Option<DateTime<Utc>>,
     pub lag_seconds: Option<i64>,
+    /// Last committed history boundary, including empty windows; separate from source freshness.
+    pub polled_through: Option<DateTime<Utc>>,
+    pub backlog_seconds: Option<i64>,
     pub records_read_total: i64,
     pub accepted_total: i64,
     pub ignored_total: i64,
@@ -10238,6 +10241,8 @@ pub struct ProblemDetails {
 
 impl From<tally_store_postgres::ConnectorStateView> for ConnectorStateResponse {
     fn from(value: tally_store_postgres::ConnectorStateView) -> Self {
+        let polled_through = value.polled_through();
+        let backlog_seconds = value.backlog_seconds(Utc::now());
         Self {
             sample: false,
             connector_instance_id: value.connector_instance_id,
@@ -10252,6 +10257,8 @@ impl From<tally_store_postgres::ConnectorStateView> for ConnectorStateResponse {
             last_poll_at: value.last_poll_at,
             last_source_at: value.last_source_at,
             lag_seconds: value.lag_seconds,
+            polled_through,
+            backlog_seconds,
             records_read_total: value.records_read_total,
             accepted_total: value.accepted_total,
             ignored_total: value.ignored_total,
@@ -11295,7 +11302,7 @@ mod tests {
     #[test]
     fn integration_capability_manifest_is_bounded_read_only_and_content_free() {
         let registry: RegistryManifest = serde_json::from_str(include_str!(
-            "../../../registry-data/dist/tally-registry-2026.08.5.manifest.json"
+            "../../../registry-data/dist/tally-registry-2026.10.1.manifest.json"
         ))
         .expect("registry manifest");
         let manifest = build_integration_capability_manifest(

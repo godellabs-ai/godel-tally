@@ -284,9 +284,9 @@ fn project_row(
 fn field<'a>(row: &'a Map<String, Value>, names: &[&str]) -> Option<&'a str> {
     names
         .iter()
-        .find_map(|name| row.get(*name).and_then(Value::as_str))
+        .filter_map(|name| row.get(*name).and_then(Value::as_str))
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .find(|value| !value.is_empty())
 }
 
 fn bounded_field(row: &Map<String, Value>, names: &[&str], max_len: usize) -> Option<String> {
@@ -359,5 +359,29 @@ mod tests {
         assert!(projected.contains("employee@example.com"));
         assert!(projected.contains("api.openai.com"));
         assert!(!projected.contains("must-not-survive"));
+    }
+
+    #[test]
+    fn blank_upn_falls_back_to_the_scoped_process_account() {
+        let start = "2026-10-24T12:00:00Z".parse().unwrap();
+        let end = "2026-10-24T13:00:00Z".parse().unwrap();
+        let mut row = serde_json::from_value::<Map<String, Value>>(serde_json::json!({
+            "Timestamp":"2026-10-24T12:15:00Z", "DeviceId":"device-1",
+            "DeviceName":"laptop", "InitiatingProcessAccountUpn":"  ",
+            "InitiatingProcessAccountName":"_trustd", "InitiatingProcessAccountDomain":"",
+            "InitiatingProcessFileName":"microsoft edge helper"
+        }))
+        .unwrap();
+        let event = project_row(&row, start, end).unwrap();
+        assert_eq!(event.user_id.as_deref(), Some("device-1\\_trustd"));
+        assert_eq!(event.file_name.as_deref(), Some("microsoft edge helper"));
+        row.insert(
+            "InitiatingProcessAccountUpn".into(),
+            Value::String("user@example.test".into()),
+        );
+        assert_eq!(
+            project_row(&row, start, end).unwrap().user_id.as_deref(),
+            Some("user@example.test")
+        );
     }
 }
