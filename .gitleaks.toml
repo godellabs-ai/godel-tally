@@ -4,9 +4,11 @@ title = "Gödel Tally Gitleaks configuration"
 useDefault = true
 
 [[allowlists]]
-description = "Known synthetic values used by negative-path fixtures"
+description = "Known synthetic values used by negative-path connector/auth fixtures"
 regexTarget = "secret"
 regexes = [
+  # Password for the synthetic second-admin@example.test auth integration fixture.
+  '''^revoked\-invite\-pass\-91$''',
   '''^wrong-secret$''',
   '''^kubernetes_api_v1$''',
 ]

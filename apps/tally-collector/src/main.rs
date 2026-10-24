@@ -61,6 +61,7 @@ mod gcp;
 mod kubernetes;
 mod litellm;
 mod managed_agents;
+mod mdm;
 mod nextdns;
 mod provider;
 mod pull_support;
@@ -71,6 +72,9 @@ const INITIAL_BACKFILL_MIN_SECONDS: u32 = 60;
 const INITIAL_BACKFILL_MAX_SECONDS: u32 = 604_800;
 const EVENT_SETTLE_SECONDS: i64 = 300;
 const MAX_EVENT_WINDOW_SECONDS: i64 = 300;
+// Graph caps rows independently of time. Sparse history can advance a day at a time;
+// saturated windows still bisect before anything is committed.
+const MAX_DEFENDER_EVENT_WINDOW_SECONDS: i64 = 86_400;
 type EventWindow = (DateTime<Utc>, DateTime<Utc>);
 
 fn valid_initial_backfill_seconds(value: u32) -> bool {
@@ -84,6 +88,15 @@ fn next_event_window(
     cursor: Option<DateTime<Utc>>,
     now: DateTime<Utc>,
     backfill_seconds: u32,
+) -> Result<Option<EventWindow>, &'static str> {
+    next_event_window_with_limit(cursor, now, backfill_seconds, MAX_EVENT_WINDOW_SECONDS)
+}
+
+fn next_event_window_with_limit(
+    cursor: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    backfill_seconds: u32,
+    maximum_seconds: i64,
 ) -> Result<Option<EventWindow>, &'static str> {
     let settled = now - chrono::Duration::seconds(EVENT_SETTLE_SECONDS);
     let settled =
@@ -101,7 +114,7 @@ fn next_event_window(
     }
     Ok(Some((
         start,
-        (start + chrono::Duration::seconds(MAX_EVENT_WINDOW_SECONDS)).min(settled),
+        (start + chrono::Duration::seconds(maximum_seconds)).min(settled),
     )))
 }
 
@@ -520,6 +533,10 @@ struct ReceiverArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum VendorAdapter {
+    IruInventory,
+    AddigyInventory,
+    IntuneInventory,
+    JamfInventory,
     DefenderStream,
     ServicenowAgents,
     N8nAgents,
@@ -593,6 +610,10 @@ impl PushAdapter {
 impl VendorAdapter {
     const fn key(self) -> &'static str {
         match self {
+            Self::IruInventory => "iru_inventory",
+            Self::AddigyInventory => "addigy_inventory",
+            Self::IntuneInventory => "intune_inventory",
+            Self::JamfInventory => "jamf_inventory",
             Self::DefenderStream => "defender_stream",
             Self::ServicenowAgents => "servicenow_agents",
             Self::N8nAgents => "n8n_agents",
@@ -647,6 +668,10 @@ impl VendorAdapter {
 
     fn from_key(value: &str) -> Option<Self> {
         match value {
+            "iru_inventory" => Some(Self::IruInventory),
+            "addigy_inventory" => Some(Self::AddigyInventory),
+            "intune_inventory" => Some(Self::IntuneInventory),
+            "jamf_inventory" => Some(Self::JamfInventory),
             "defender_stream" => Some(Self::DefenderStream),
             "servicenow_agents" => Some(Self::ServicenowAgents),
             "n8n_agents" => Some(Self::N8nAgents),
@@ -702,6 +727,10 @@ impl VendorAdapter {
 
     fn descriptor(self) -> ConnectorDescriptor {
         match self {
+            Self::IruInventory => tally_connectors::MdmProvider::Iru.descriptor(),
+            Self::AddigyInventory => tally_connectors::MdmProvider::Addigy.descriptor(),
+            Self::IntuneInventory => tally_connectors::MdmProvider::Intune.descriptor(),
+            Self::JamfInventory => tally_connectors::MdmProvider::Jamf.descriptor(),
             Self::DefenderStream => tally_connectors::defender_stream_descriptor(),
             Self::ServicenowAgents => tally_connectors::managed_agents_descriptor("servicenow"),
             Self::N8nAgents => tally_connectors::managed_agents_descriptor("n8n"),
@@ -770,6 +799,28 @@ impl VendorAdapter {
             | Self::DifyAgents => {
                 tally_connectors::import_managed_agents_json(input, config).map_err(Into::into)
             }
+            Self::IruInventory => {
+                tally_connectors::import_mdm_json(input, tally_connectors::MdmProvider::Iru, config)
+                    .map_err(Into::into)
+            }
+            Self::AddigyInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Addigy,
+                config,
+            )
+            .map_err(Into::into),
+            Self::IntuneInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Intune,
+                config,
+            )
+            .map_err(Into::into),
+            Self::JamfInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Jamf,
+                config,
+            )
+            .map_err(Into::into),
             Self::Nextdns => import_nextdns_csv(input, config).map_err(Into::into),
             Self::NextdnsApi => import_nextdns_api_json(input, config).map_err(Into::into),
             Self::CloudflareGateway => {
@@ -2904,6 +2955,7 @@ async fn prepare_scheduled_job(
     // while the lease is held.
     let credentials = JobCredentials::open(cipher, job)?;
     match kind {
+        "mdm_inventory_v1" => mdm::prepare(postgres, &credentials, client, job).await,
         "file_env_v1" => prepare_scheduled_file(postgres, &credentials, job).await,
         "nextdns_api_v1" => prepare_nextdns_api(postgres, &credentials, client, job).await,
         "cloud_api_v1" => prepare_scheduled_cloud(postgres, &credentials, client, job).await,
@@ -3013,8 +3065,12 @@ async fn prepare_scheduled_microsoft_defender(
     } else {
         Some(parse_microsoft_defender_cursor(&cursor_before).ok_or("connector_cursor_invalid")?)
     };
-    let Some((window_start, mut window_end)) =
-        next_event_window(previous, Utc::now(), backfill_seconds)?
+    let Some((window_start, mut window_end)) = next_event_window_with_limit(
+        previous,
+        Utc::now(),
+        backfill_seconds,
+        MAX_DEFENDER_EVENT_WINDOW_SECONDS,
+    )?
     else {
         return Ok(PreparedJob::EmptyPoll {
             descriptor,
@@ -4595,6 +4651,21 @@ async fn record_empty_poll(
         .register_connector(job.installation_id, job.connector_instance_id, &descriptor)
         .await
         .context("register empty connector poll")?;
+    if job
+        .config_refs
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        == Some("mdm_inventory_v1")
+    {
+        let at = cursor_after
+            .strip_prefix("mdm-v1:")
+            .and_then(|v| v.parse().ok())
+            .and_then(DateTime::from_timestamp_millis)
+            .context("invalid inventory snapshot checkpoint")?;
+        postgres
+            .complete_inventory_snapshot(job.installation_id, job.connector_instance_id, at, &[])
+            .await?;
+    }
     postgres
         .record_connector_run(&ConnectorRunRecord {
             run_id: Uuid::now_v7(),
@@ -5539,6 +5610,41 @@ async fn connect_postgres() -> Result<PostgresStore> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sparse_defender_history_catches_up_in_seven_bounded_windows() {
+        let now: DateTime<Utc> = "2026-10-24T12:00:00Z".parse().unwrap();
+        let mut cursor = None;
+        for _ in 0..7 {
+            let (start, end) = next_event_window_with_limit(
+                cursor,
+                now,
+                604_800,
+                MAX_DEFENDER_EVENT_WINDOW_SECONDS,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!((end - start).num_seconds(), 86_400);
+            // A full result is retried from the same start at a shorter boundary.
+            let split = shrink_event_window(start, end).unwrap();
+            let resumed = next_event_window_with_limit(
+                Some(split),
+                now,
+                604_800,
+                MAX_DEFENDER_EVENT_WINDOW_SECONDS,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(resumed.0, split);
+            cursor = Some(end);
+        }
+        assert_eq!(cursor, Some(now - chrono::Duration::minutes(5)));
+        assert!(
+            next_event_window_with_limit(cursor, now, 604_800, MAX_DEFENDER_EVENT_WINDOW_SECONDS)
+                .unwrap()
+                .is_none()
+        );
+    }
 
     #[test]
     fn event_windows_advance_from_the_checkpoint_and_split_full_windows() {

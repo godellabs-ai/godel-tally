@@ -58,11 +58,17 @@ services:
       TALLY_SECRET_KEY: ${TALLY_SECRET_KEY:?Set TALLY_SECRET_KEY in .env}
       TALLY_URL: ${TALLY_URL:-https://localhost:2357}
       TALLY_MAINTENANCE_DIR: /data/maintenance
-      TALLY_UPGRADE_HOST_REQUIRED: "1"
+      TALLY_UPGRADE_CONTAINER_EXECUTION: "1"
+      TALLY_RUNTIME_MODE: combined-compose
+      TALLY_DEPLOYMENT_ROOT: ${TALLY_DEPLOYMENT_ROOT:-/var/lib/godel-tally/deploy}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      TALLY_UPGRADE_GATE_PATH: ${TALLY_DEPLOYMENT_ROOT:-/var/lib/godel-tally/deploy}/godel-gate
       TALLY_UPGRADE_STATE_DIR: /data/upgrade
       TALLY_UPGRADE_WEB_ORIGIN: ${TALLY_URL:-https://localhost:2357}
     volumes:
       - tally-data:/data
+      - ${TALLY_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${TALLY_DEPLOYMENT_ROOT:-/var/lib/godel-tally/deploy}:${TALLY_DEPLOYMENT_ROOT:-/var/lib/godel-tally/deploy}
       # Put tally.crt and tally.key here for your own certificate; leave it empty for a self-signed one.
       - ${TALLY_TLS_DIR:-./tls}:/tls:ro
     ports:

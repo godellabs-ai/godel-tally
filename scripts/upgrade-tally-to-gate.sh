@@ -14,6 +14,12 @@ state_dir="$TALLY_UPGRADE_STATE_DIR/gate-upgrade"
 maintenance_dir="${TALLY_MAINTENANCE_DIR:-$root/.local/tally-maintenance}"
 mkdir -p "$state_dir"
 chmod 700 "$state_dir"
+staging_dir="$state_dir"
+if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then
+    staging_dir="${TALLY_DEPLOYMENT_ROOT:?Host deployment root required}/.tally-upgrade-stage"
+    mkdir -p "$staging_dir"
+    chmod 700 "$staging_dir"
+fi
 phase="${1:-}"
 shift || true
 
@@ -70,7 +76,12 @@ resume_tally_http() {
 verify_tally_http() {
     local attempt port cert="${TALLY_TLS_CERT_FILE:-$root/.local/tls/tally.crt}" options=()
     port="${TALLY_URL##*:}"; [[ "$port" =~ ^[0-9]+$ ]] || port=443
-    options=(-fsS --noproxy '*' --max-time 2 --connect-to "::127.0.0.1:$port")
+    if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then
+        source_address="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$TALLY_UPGRADE_SOURCE_CONTAINER" | head -n 1)"
+        options=(-fsS --noproxy '*' --max-time 2 --connect-to "::$source_address:2357")
+    else
+        options=(-fsS --noproxy '*' --max-time 2 --connect-to "::127.0.0.1:$port")
+    fi
     if [ -f "$cert" ]; then options+=(--cacert "$cert"); fi
     for attempt in $(seq 1 60); do
         if curl "${options[@]}" \
@@ -84,8 +95,30 @@ sha256_file() {
     if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d ' ' -f 1
     else shasum -a 256 "$1" | cut -d ' ' -f 1; fi
 }
+attach_gate_network() {
+    local container network network_id
+    container="$(compose_gate ps -q postgres)"
+    network="$(docker inspect --format '{{range $name, $value := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$container" | head -n 1)"
+    network_id="$(docker network inspect --format '{{.Id}}' "$network")"
+    docker network connect "$network" "$HOSTNAME" 2>/dev/null || \
+        docker inspect --format '{{range .NetworkSettings.Networks}}{{println .NetworkID}}{{end}}' "$HOSTNAME" | grep -Fxq "$network_id"
+}
 verify_url() {
     local authority host port
+    if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then
+        local router address target_host target_port
+        attach_gate_network
+        router="$(compose_gate ps -q router)"
+        address="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$router" | head -n 1)"
+        target_host="${1#https://}"; target_port="${target_host##*:}"; target_host="${target_host%%:*}"
+        [[ "$target_port" =~ ^[0-9]+$ ]] || target_port=443
+        if [ "${3:-}" = public ]; then
+            curl -fsS --noproxy '*' --max-time 15 --connect-to "$target_host:$target_port:$address:443" "$1/api/v1/health" >/dev/null
+        else
+            curl -fsS --noproxy '*' --max-time 15 --connect-to "$target_host:$target_port:$address:443" --cacert "$2" "$1/api/v1/health" >/dev/null
+        fi
+        return
+    fi
     authority="${1#https://}"
     host="${authority%%:*}"
     port=443
@@ -99,6 +132,12 @@ verify_url() {
     fi
 }
 port_available() {
+    if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then
+        local image
+        image="$(docker inspect --format '{{.Image}}' "$TALLY_UPGRADE_SOURCE_CONTAINER" | head -n 1)"
+        docker run --rm --no-healthcheck -p "127.0.0.1:$1:9" --entrypoint python3 "$image" -c 'pass' >/dev/null 2>&1
+        return
+    fi
     python3 - "$1" <<'PY'
 import socket
 import sys
@@ -214,9 +253,9 @@ keyUsage = critical,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth
 EOF
     openssl req -x509 -newkey rsa:2048 -nodes -days 14 \
-        -keyout "$state_dir/staging.key" -out "$state_dir/staging.crt" \
+        -keyout "$staging_dir/staging.key" -out "$staging_dir/staging.crt" \
         -config "$config" >/dev/null 2>&1 || fail "could not generate Gate review certificate"
-    chmod 600 "$state_dir/staging.key" "$state_dir/staging.crt" "$config"
+    chmod 600 "$staging_dir/staging.key" "$staging_dir/staging.crt" "$config"
 }
 tally_count() { tally_query "SELECT count(*) FROM $1"; }
 gate_count() { compose_gate exec -T postgres psql -U ggate -d ggate -Atc "SELECT count(*) FROM $1"; }
@@ -227,6 +266,13 @@ check_migration_versions() {
     record source_schema_head "$source_head"
     record gate_schema_head "$gate_head"
     rm -f "$state_dir/migration_warning"
+    if [[ ! "$source_head" =~ ^[0-9]+$ ]] || [[ ! "$gate_head" =~ ^[0-9]+$ ]]; then
+        fail "Cannot verify Tally/Gate schema compatibility. Use a Gate release that publishes its supported Tally schema head."
+    fi
+    if [ "$source_head" -ge 13 ] && [ "$gate_head" -lt 13 ]; then
+        fail "This Gate release does not support Tally attribution/inventory schema 13. Use a Gate release containing the new Tally migrations before retrying. Tally writers have not been paused."
+    fi
+
     if [[ ! "$source_head" =~ ^[0-9]+$ ]] || [[ ! "$gate_head" =~ ^[0-9]+$ ]]; then
         warning="PostgreSQL migration versions could not be compared; continuing with best-effort data transfer."
     elif [ "$source_head" = "$gate_head" ]; then
@@ -340,7 +386,13 @@ verify_counts() {
         printf 'tally_schema_head=%s\ngate_schema_head=%s\n' \
             "$(read_record source_schema_head)" "$(read_record gate_schema_head)" >> "$state_dir/verification.txt"
     fi
-    for table in installations connector_states connector_jobs connector_runs ingestion_batches findings finding_observations endpoint_hosts endpoint_users audit_log; do
+    local source_head tables
+    tables=(installations connector_states connector_jobs connector_runs ingestion_batches findings finding_observations endpoint_hosts endpoint_users audit_log)
+    source_head="$(cat "$state_dir/source_schema_head" 2>/dev/null || printf '0')"
+    if [[ "$source_head" =~ ^[0-9]+$ ]] && [ "$source_head" -ge 13 ]; then
+        tables+=(finding_activity finding_activity_revisions identity_facts identity_device_aliases endpoint_process_facts inventory_source_presence inventory_sync_status inventory_presence_events identity_links identity_corrections identity_replay_jobs identity_enrichments)
+    fi
+    for table in "${tables[@]}"; do
         source="$(tally_count "$table")"
         target="$(gate_count "$table")"
         # Gate's worker is already running during preparation and can add runs,
@@ -356,6 +408,18 @@ verify_counts() {
             endpoint_hosts) key=endpoint_host_id ;;
             endpoint_users) key=endpoint_user_id ;;
             audit_log) key=audit_id ;;
+            finding_activity) key="jsonb_build_array(finding_id,observation_id)::text || ':' || md5(context::text)" ;;
+            finding_activity_revisions) key="jsonb_build_array(finding_id,observation_id,digest)::text || ':' || md5(context::text)" ;;
+            identity_facts) key="fact_id::text || ':' || md5(attributes::text)" ;;
+            identity_device_aliases|endpoint_process_facts) key="jsonb_build_array(installation_id,connector_instance_id,observation_id)::text" ;;
+            identity_links) key="jsonb_build_array(installation_id,device_id,user_id,role,observation_id)::text" ;;
+            identity_corrections) key=correction_id ;;
+            identity_replay_jobs) key=installation_id ;;
+            identity_enrichments) key="jsonb_build_array(installation_id,observation_id)::text" ;;
+            inventory_sync_status) key="jsonb_build_array(installation_id,connector_instance_id)::text" ;;
+            inventory_source_presence) key="jsonb_build_array(installation_id,connector_instance_id,device_key)::text" ;;
+            inventory_presence_events) key="jsonb_build_array(installation_id,connector_instance_id,device_key,extract(epoch from observed_at))::text" ;;
+
         esac
         # Process substitutions do not propagate a failed database query. Stage
         # each key stream separately so an unavailable database cannot pass.
@@ -524,7 +588,7 @@ if [ "$phase" = prepare ]; then
     temp_url="https://$cert_host:$stage_port"
     umask 077
     stage_certificate "$cert_host"
-    cert="$state_dir/staging.crt"; key="$state_dir/staging.key"
+    cert="$staging_dir/staging.crt"; key="$staging_dir/staging.key"
 
     if combined_runtime; then
         mode="${TALLY_RUNTIME_MODE:-combined}"
@@ -585,7 +649,7 @@ if [ "$phase" = prepare ]; then
     # Gate migration 042 references Tally tables, which do not exist until the dump is
     # restored. Stage an empty database; the Gate worker applies Tally then Gate
     # migrations in order when the full stack starts after the import.
-    empty_initdb="$state_dir/empty-initdb"
+    empty_initdb="$staging_dir/empty-initdb"
     mkdir -p "$empty_initdb"
     if GGATE_DB_MIGRATIONS_DIR="$empty_initdb" sh "$installer" --console-url "$temp_url" --tls-cert "$cert" --tls-key "$key" \
         --registration-key-file "$registration_file" --dir "$gate_dir" --version "$version" \
@@ -631,6 +695,13 @@ if [ "$phase" = prepare ]; then
     compose_gate exec -T postgres pg_restore -U ggate -d ggate --no-owner --no-acl --exit-on-error < "$backup"
     prepare_imported_migration_ledger
     progress "Tally data restored to Gate PostgreSQL"
+    if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then
+        gate_postgres="$(compose_gate ps -q postgres)"
+        gate_network="$(docker inspect --format '{{range $name, $value := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$gate_postgres" | head -n 1)"
+        attach_gate_network
+        export TALLY_IMPORT_PG_HOST="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$gate_postgres" | head -n 1)"
+        import_pg_port=5432
+    fi
     progress "Re-encrypting connector credentials for Gate"
     TALLY_UPGRADE_SOURCE_ENV="$state_dir/tally.env" TALLY_UPGRADE_GATE_ENV="$gate_dir/.env" TALLY_IMPORT_PG_PORT="$import_pg_port" \
         "${rekey[@]}"
@@ -783,7 +854,10 @@ elif [ "$phase" = cutover ]; then
     if combined_runtime; then
         # Keep read-only sticky so a supervisor or manual restart cannot resume stale writers.
         : > "$maintenance_dir/retired"
-        if [ "$(read_record mode)" = combined-compose ]; then compose_tally stop tallyd; fi
+        if [ "$(read_record mode)" = combined-compose ]; then
+            if [ "${TALLY_UPGRADE_EXECUTOR:-0}" = 1 ]; then docker stop "$TALLY_UPGRADE_SOURCE_CONTAINER" >/dev/null
+            else compose_tally stop tallyd; fi
+        fi
     fi
 elif [ "$phase" = status ]; then
     if [ -f "$state_dir/status" ]; then

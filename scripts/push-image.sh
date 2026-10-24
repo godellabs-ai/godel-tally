@@ -31,7 +31,7 @@ for arch in amd64 arm64; do
     mkdir "$binaries/linux-$arch"
     cp "target/$target/container/tallyd" "$binaries/linux-$arch/tallyd"
     file -b "$binaries/linux-$arch/tallyd" | grep -q "ELF 64-bit.*$machine" || fail "tallyd for linux/$arch has the wrong architecture"
-    file -b "$binaries/linux-$arch/tallyd" | grep -Eq "static-pie linked|statically linked" || fail "tallyd for linux/$arch must be static for scratch"
+    file -b "$binaries/linux-$arch/tallyd" | grep -Eq "static-pie linked|statically linked" || fail "tallyd for linux/$arch must be static for portable release packaging"
 done
 for arch in amd64 arm64; do
     printf '\nBuilding and checking %s:%s-%s...\n' "$image" "$version" "$arch"

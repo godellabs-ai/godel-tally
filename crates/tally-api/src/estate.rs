@@ -136,6 +136,11 @@ pub(super) async fn append_ai(
     digest: &str,
 ) -> Result<(), ApiError> {
     state
+        .postgres
+        .record_identity_observations(observations)
+        .await
+        .map_err(ApiError::dependency)?;
+    state
         .observations
         .record_coverage(observations)
         .await

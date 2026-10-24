@@ -52,6 +52,10 @@ pub(crate) struct RemoveSampleDataRequest {
 
 fn sample_descriptors() -> Vec<ConnectorDescriptor> {
     let adapters = [
+        ImportAdapterInput::IruInventory,
+        ImportAdapterInput::AddigyInventory,
+        ImportAdapterInput::IntuneInventory,
+        ImportAdapterInput::JamfInventory,
         ImportAdapterInput::DefenderStream,
         ImportAdapterInput::ServicenowAgents,
         ImportAdapterInput::N8nAgents,
@@ -295,6 +299,32 @@ fn build_plan(installation: Uuid, created_at: DateTime<Utc>) -> SamplePlan {
             );
             o.observation_id = observation_id;
             o.received_at = at;
+            if [
+                "iru_inventory_v1",
+                "addigy_inventory_v1",
+                "intune_inventory_v1",
+                "jamf_inventory_v1",
+            ]
+            .contains(&descriptor.connector_type.as_str())
+            {
+                o.kind = ObservationKind::NetworkMapping;
+                o.actor.hostname = Some(host_name.clone());
+                o.actor.device_key = Some(format!("{ns}.inventory-device.{key}"));
+                o.inventory.os = Some("Evaluation device OS".into());
+                o.inventory.user_role = Some(tally_core::IdentityRole::AssignedOwner);
+                o.actor.identity = Some(IdentityObservation {
+                    subject_key: format!("{ns}.inventory-user.{person_index}"),
+                    email: Some(email.clone()),
+                    source_subject: None,
+                    source_subject_kind: None,
+                    authority: Some(IdentityAuthority::LocalOperator),
+                    directory_key: None,
+                    application_key: None,
+                    display_label: None,
+                });
+                plan.observations.push(o);
+                continue;
+            }
             if let Some(platform) = hosted_agent_platform(&descriptor.connector_type) {
                 o.service.vendor_application_id = Some(format!("{ns}.{provider_index}"));
                 o.service.declared_model_id = Some(model_key);
@@ -482,6 +512,7 @@ fn build_plan(installation: Uuid, created_at: DateTime<Utc>) -> SamplePlan {
                 plan.push("findings",serde_json::json!({"finding_id":finding,"installation_id":installation,"provider_id":provider,"model_id":model,
                     "evidence_kind":evidence,"first_used_at":at,"last_used_at":at,"usage_count":i32::from(evidence=="ai_usage"),"created_at":at,"updated_at":at}));
             }
+            plan.push("finding_activity",serde_json::json!({"finding_id":finding,"observation_id":observation_id,"installation_id":installation,"connector_instance_id":connector,"observed_at":at,"context":tally_core::ActivityAttribution::from(&o)}));
             plan.push("finding_observations",serde_json::json!({"observation_id":observation_id,"finding_id":finding,"observed_at":at,"counts_as_usage":evidence=="ai_usage"}));
             plan.push("finding_hosts",serde_json::json!({"finding_id":finding,"endpoint_host_id":host,"role":"source","port":0,"first_seen":at,"last_seen":at}));
             plan.push("finding_users",serde_json::json!({"finding_id":finding,"endpoint_user_id":user,"first_seen":at,"last_seen":at}));
@@ -570,7 +601,7 @@ fn build_plan(installation: Uuid, created_at: DateTime<Utc>) -> SamplePlan {
     plan
 }
 
-const TABLES: [&str; 18] = [
+const TABLES: [&str; 19] = [
     "ai_providers",
     "ai_models",
     "ai_provider_models",
@@ -582,6 +613,7 @@ const TABLES: [&str; 18] = [
     "destination_hosts",
     "findings",
     "finding_observations",
+    "finding_activity",
     "finding_hosts",
     "finding_users",
     "finding_destinations",
@@ -768,6 +800,11 @@ pub(crate) async fn add(
             insert_records(&mut transaction, table, rows).await?;
         }
     }
+    state
+        .postgres
+        .record_identity_observations(&plan.observations)
+        .await
+        .map_err(ApiError::dependency)?;
     sqlx::query("UPDATE tally_sample_workspace SET state='ready' WHERE installation_id=$1")
         .bind(installation)
         .execute(&mut *transaction)
@@ -803,6 +840,37 @@ pub(crate) async fn remove(
             .await
             .map_err(ApiError::dependency)?;
         let mut transaction = connection.begin().await.map_err(ApiError::dependency)?;
+        for table in [
+            "identity_facts",
+            "identity_links",
+            "identity_device_aliases",
+            "endpoint_process_facts",
+            "identity_enrichments",
+        ] {
+            let query = match table {
+                "identity_facts" => {
+                    "DELETE FROM identity_facts WHERE installation_id=$1 AND observation_id=ANY($2)"
+                }
+                "identity_links" => {
+                    "DELETE FROM identity_links WHERE installation_id=$1 AND observation_id=ANY($2)"
+                }
+                "identity_device_aliases" => {
+                    "DELETE FROM identity_device_aliases WHERE installation_id=$1 AND observation_id=ANY($2)"
+                }
+                "endpoint_process_facts" => {
+                    "DELETE FROM endpoint_process_facts WHERE installation_id=$1 AND observation_id=ANY($2)"
+                }
+                _ => {
+                    "DELETE FROM identity_enrichments WHERE installation_id=$1 AND observation_id=ANY($2)"
+                }
+            };
+            sqlx::query(query)
+                .bind(installation)
+                .bind(plan.observation_ids())
+                .execute(&mut *transaction)
+                .await
+                .map_err(ApiError::dependency)?;
+        }
         for (table, column) in [
             ("findings", "finding_id"),
             ("connector_states", "connector_instance_id"),
@@ -1037,6 +1105,17 @@ mod tests {
         );
         assert!(plan.rows["findings"].len() < plan.observations.len());
         for o in &plan.observations {
+            if o.connector.connector_type.ends_with("_inventory_v1")
+                && o.kind == ObservationKind::NetworkMapping
+                && o.service.vendor_application_id.is_none()
+            {
+                assert!(o.agent.name.is_none());
+                assert!(!o.service.ai_request);
+                assert!(o.service.declared_model_id.is_none());
+                assert!(o.actor.device_key.is_some());
+                continue;
+            }
+
             assert!(!o.agent.name.as_deref().unwrap().contains("Sample"));
             if let Some(workload) = &o.workload.workload_name {
                 assert!(!workload.contains("sample"));
@@ -1287,6 +1366,7 @@ mod tests {
         for model in MODELS {
             let live_finding = store
                 .record_usage(&tally_store_postgres::ObservedUsage {
+                    activity: None,
                     observation_id: Uuid::now_v7(),
                     installation_id: installation,
                     provider_key: provider.to_string(),

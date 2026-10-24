@@ -1,4 +1,4 @@
-//! `CrowdStrike` Falcon EDR DNS telemetry normalization.
+//! `CrowdStrike` Falcon EDR DNS, network and process telemetry normalization.
 //!
 //! This connector accepts only the collector-produced allowlisted projection of EDR
 //! `DnsRequest` events from Falcon Next-Gen SIEM. Raw event-search results never cross the
@@ -33,6 +33,28 @@ struct EdrDnsProjection {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EdrDnsEvent {
+    #[serde(default)]
+    event_kind: Option<String>,
+    #[serde(default)]
+    executable: Option<String>,
+    #[serde(default)]
+    process_id: Option<String>,
+    #[serde(default)]
+    process_unique_id: Option<String>,
+    #[serde(default)]
+    parent_executable: Option<String>,
+    #[serde(default)]
+    parent_unique_id: Option<String>,
+    #[serde(default)]
+    source_ip: Option<String>,
+    #[serde(default)]
+    remote_ip: Option<String>,
+    #[serde(default)]
+    protocol: Option<String>,
+    #[serde(default)]
+    remote_port: Option<u16>,
+    #[serde(default)]
+    process_started_at: Option<DateTime<Utc>>,
     id: String,
     observed_at: DateTime<Utc>,
     #[serde(default)]
@@ -47,10 +69,15 @@ struct EdrDnsEvent {
 
 #[derive(Serialize)]
 struct CanonicalEdrDnsQuery<'a> {
+    process: &'a tally_core::ProcessObservation,
+    source_ip: Option<&'a str>,
+    remote_ip: Option<&'a str>,
+    remote_port: Option<u16>,
+    event_kind: Option<&'a str>,
     tenant_key: &'a str,
     application_key: &'a str,
     request_key: &'a str,
-    registry_entry_id: &'a str,
+    registry_entry_id: Option<&'a str>,
     user_id: Option<&'a str>,
     hostname: Option<&'a str>,
     destination_domain: Option<&'a str>,
@@ -65,24 +92,25 @@ pub fn crowdstrike_edr_api_descriptor() -> ConnectorDescriptor {
         display_name: "CrowdStrike Falcon EDR".to_owned(),
         implementation_version: env!("CARGO_PKG_VERSION").to_owned(),
         source_vendor: "CrowdStrike".to_owned(),
-        source_product: "Falcon Insight EDR endpoint DNS telemetry via Falcon Next-Gen SIEM"
+        source_product: "Falcon Insight EDR DNS, network and process telemetry via Falcon Next-Gen SIEM"
             .to_owned(),
-        record_variants: vec!["DnsRequest".to_owned()],
+        record_variants: vec!["DnsRequest".into(),"ProcessRollup2".into(),"NetworkConnectIP4/IP6".into()],
         transport: ConnectorTransport::Pull,
         required_permissions: vec![
-            "Falcon Insight EDR subscription with endpoint DNS telemetry".to_owned(),
+            "Falcon Insight EDR subscription with base_sensor DNS, network and process telemetry".to_owned(),
             "Falcon OAuth2 API client with humio-auth-proxy:read access".to_owned(),
             "operator access to search Falcon EDR sensor events in LogScale".to_owned(),
         ],
         requested_fields: vec![
             "event ID and timestamp".to_owned(),
             "DNS domain, Falcon endpoint hostname, and Falcon agent ID".to_owned(),
-            "source user name when supplied by the DNS event".to_owned(),
+            "source user name when supplied by the event".to_owned(),
+            "native process identity, executable basename, parent identity and source/destination tuple".to_owned(),
         ],
         prohibited_fields: vec![
-            "process command lines, executable and file metadata, hashes, or registry values"
+            "process command lines, full executable paths, file hashes, or registry values"
                 .to_owned(),
-            "network addresses, HTTP bodies, headers, paths, and arbitrary event attributes"
+            "HTTP bodies, headers, URL paths, and arbitrary event attributes"
                 .to_owned(),
             "identity display names and geolocation".to_owned(),
             "raw Falcon or LogScale response bytes and unselected event attributes".to_owned(),
@@ -93,14 +121,14 @@ pub fn crowdstrike_edr_api_descriptor() -> ConnectorDescriptor {
         replay_capability: ReplayCapability::OverlapWindow,
         health_capabilities: vec![
             "Falcon OAuth and NGSIEM query reachability".to_owned(),
-            "endpoint DNS event freshness".to_owned(),
+            "endpoint DNS, network and process event freshness".to_owned(),
             "normalization quality and result-limit detection".to_owned(),
         ],
         coverage_capabilities: vec![
             "endpoint DNS requests to registry-recognized AI services".to_owned(),
             "source user and endpoint attribution when supplied by EDR telemetry".to_owned(),
         ],
-        privacy_contract: "The collector queries only base_sensor DnsRequest events and emits an explicit allowlist of event ID, timestamp, DNS domain, endpoint hostname, source user name, and Falcon agent ID. Tally retains validated user names and endpoint hostnames for attribution, pseudonymizes tenant/application/device identifiers, and discards process, file, hash, network-address, and arbitrary event attributes along with source response bytes.".to_owned(),
+        privacy_contract: "The collector queries allowlisted base_sensor DNS, network and process events and emits an explicit allowlist of event ID, timestamp, DNS domain, endpoint hostname, source user name, and Falcon agent ID. Tally retains validated user names and endpoint hostnames for attribution, pseudonymizes tenant/application/device identifiers, and retains bounded executable basenames, native process identities and network tuples. Command lines, full image paths, hashes and arbitrary source fields are discarded. DNS is not a completed invocation.".to_owned(),
     }
 }
 
@@ -149,9 +177,7 @@ pub fn import_crowdstrike_edr_dns_json(
         if event.observed_at > projection.observed_at + chrono::Duration::minutes(5) {
             return Err(VendorImportError::InvalidTimestamp { row });
         }
-        let Some(registry_entry_id) = registry_entry_for_event(&event, row)? else {
-            continue;
-        };
+        let registry_entry_id = registry_entry_for_event(&event, row)?;
         let user_id = optional_text(event.user_id.as_deref(), row, "user_id", 512)?;
         let hostname = event
             .hostname
@@ -172,7 +198,7 @@ pub fn import_crowdstrike_edr_dns_json(
                 field: "destination_domain",
             })?;
         let agent_id = optional_text(event.agent_id.as_deref(), row, "agent_id", 512)?;
-        let application_identity = registry_entry_id;
+        let application_identity = registry_entry_id.unwrap_or("unresolved");
         let application_key = config.pseudonymization_key.pseudonym_exact(
             "crowdstrike_edr_application",
             &format!("{}:{application_identity}", projection.customer_ref),
@@ -186,7 +212,79 @@ pub fn import_crowdstrike_edr_dns_json(
                 .pseudonymization_key
                 .pseudonym_exact("crowdstrike_endpoint", value)
         });
+        let safe_token = |value: &Option<String>| {
+            value
+                .as_deref()
+                .filter(|v| {
+                    v.len() <= 128
+                        && !v.is_empty()
+                        && v.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':'))
+                })
+                .map(str::to_owned)
+        };
+        if event.event_kind.as_deref().is_some_and(|v| {
+            ![
+                "DnsRequest",
+                "ProcessRollup2",
+                "NetworkConnectIP4",
+                "NetworkConnectIP6",
+            ]
+            .contains(&v)
+        }) {
+            return Err(VendorImportError::InvalidField {
+                row,
+                field: "event_kind",
+            });
+        }
+        let process = tally_core::ProcessObservation {
+            executable: event
+                .executable
+                .as_deref()
+                .and_then(tally_core::ProcessObservation::executable_basename),
+            pid: safe_token(&event.process_id),
+            unique_id: safe_token(&event.process_unique_id),
+            started_at: event.process_started_at,
+            parent_executable: event
+                .parent_executable
+                .as_deref()
+                .and_then(tally_core::ProcessObservation::executable_basename),
+            parent_pid: None,
+            parent_unique_id: safe_token(&event.parent_unique_id),
+        };
+        let source_ip = event
+            .source_ip
+            .as_deref()
+            .map(tally_core::IpAddress::parse)
+            .transpose()
+            .map_err(|_| VendorImportError::InvalidField {
+                row,
+                field: "source_ip",
+            })?;
+        let remote_ip = event
+            .remote_ip
+            .as_deref()
+            .map(tally_core::IpAddress::parse)
+            .transpose()
+            .map_err(|_| VendorImportError::InvalidField {
+                row,
+                field: "remote_ip",
+            })?;
+        if registry_entry_id.is_none()
+            && device_key.is_none()
+            && user_id.is_none()
+            && hostname.is_none()
+            && source_ip.is_none()
+            && process.is_empty()
+        {
+            continue;
+        }
         let canonical = CanonicalEdrDnsQuery {
+            process: &process,
+            source_ip: source_ip.as_ref().map(tally_core::IpAddress::as_str),
+            remote_ip: remote_ip.as_ref().map(tally_core::IpAddress::as_str),
+            remote_port: event.remote_port,
+            event_kind: event.event_kind.as_deref(),
             tenant_key: &tenant_key,
             application_key: &application_key,
             request_key: &request_key,
@@ -201,20 +299,74 @@ pub fn import_crowdstrike_edr_dns_json(
         let mut observation = base_observation(config, event.observed_at, &digest);
         observation.saas.tenant_key = Some(tenant_key.clone());
         observation.saas.application_key = Some(application_key.clone());
-        observation.service.vendor_application_id = Some(registry_entry_id.to_owned());
+        observation.service.vendor_application_id = registry_entry_id.map(str::to_owned);
         observation.service.source_category = Some("crowdstrike_edr_dns".to_owned());
-        observation.service.ai_request = true;
-        observation.service.ai_request_evaluated = true;
+        observation.service.ai_request = false;
+        observation.service.ai_request_evaluated = false;
         observation.destination.host = destination_domain;
         observation.network.request_count = Some(1);
+        observation.process = process;
+        observation.actor.source_ip = source_ip;
+        observation.destination.ip = remote_ip;
+        observation.destination.port = event.remote_port;
+        observation.network.destination_port = event.remote_port;
+        observation.network.protocol = event
+            .protocol
+            .as_deref()
+            .filter(|v| v.len() <= 16 && v.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .map(str::to_owned);
+        observation.inventory.user_role = Some(tally_core::IdentityRole::ProcessAccount);
+        observation.kind = match event.event_kind.as_deref() {
+            Some("ProcessRollup2") => ObservationKind::NetworkMapping,
+            Some("NetworkConnectIP4" | "NetworkConnectIP6") => ObservationKind::NetworkFlow,
+            _ => ObservationKind::DnsQuery,
+        };
+        if let Some((kind, name)) = observation
+            .process
+            .executable
+            .as_deref()
+            .and_then(|file| crate::agent_signatures::identify(file, ""))
+        {
+            observation.agent.key = Some(config.pseudonymization_key.pseudonym_exact(
+                "falcon_process",
+                &format!(
+                        "{}:{}:{}",
+                        device_key.as_deref().unwrap_or("unknown"),
+                        observation
+                            .process
+                            .unique_id
+                            .as_deref()
+                            .unwrap_or("unknown"),
+                        name
+                    ),
+            ));
+            observation.agent.name = Some(name);
+            observation.agent.kind = Some(kind.into());
+            observation.agent.platform = Some("endpoint".into());
+            observation.agent.state = Some("observed".into());
+        }
         observation.actor.device_key = device_key;
+        observation.inventory.device_key_kind =
+            Some(tally_core::DeviceIdentifierKind::SourceNative);
         observation.actor.hostname = hostname.map(|value| value.as_str().to_owned());
         observation.actor.identity = user_id.map(|subject| {
             let email = recognized_email(subject);
             IdentityObservation {
-                subject_key: config
-                    .pseudonymization_key
-                    .pseudonym_exact("identity", subject),
+                subject_key: config.pseudonymization_key.pseudonym_exact(
+                    "identity",
+                    &if recognized_email(subject).is_some() {
+                        subject.to_ascii_lowercase()
+                    } else {
+                        format!(
+                            "{}:{subject}",
+                            observation
+                                .actor
+                                .device_key
+                                .as_deref()
+                                .unwrap_or(&request_key)
+                        )
+                    },
+                ),
                 email,
                 source_subject: Some(subject.to_owned()),
                 source_subject_kind: Some(IdentitySubjectKind::UserName),
@@ -270,6 +422,7 @@ pub(crate) fn registry_entry_for_label(value: &str) -> Option<&'static str> {
             Some("svc.google.gemini_api")
         }
         _ if host_matches(&raw, "chat.deepseek.com") => Some("app.deepseek.chat"),
+        _ if raw == "chat.z.ai" => Some("app.zai.chat"),
         _ if host_matches(&raw, "api.deepseek.com") => Some("svc.deepseek.api"),
         _ if host_matches(&raw, "api.cohere.com") => Some("svc.cohere.api"),
         _ if host_matches(&raw, "api.mistral.ai") => Some("svc.mistral.api"),
@@ -409,10 +562,9 @@ fn finish_import(
             connector_type: CONNECTOR_TYPE.to_owned(),
             pseudonymization: "hmac_sha256_installation_key_v1".to_owned(),
             discarded_fields: vec![
-                "process command lines, executable and file metadata, hashes, and registry values"
+                "process command lines, full image paths, file hashes, and registry values"
                     .to_owned(),
-                "network addresses, HTTP metadata, identity display names, and arbitrary attributes"
-                    .to_owned(),
+                "raw HTTP metadata, identity display names, and arbitrary attributes".to_owned(),
                 "raw Falcon and LogScale response bytes".to_owned(),
             ],
             source_bytes_retained: false,
@@ -496,6 +648,9 @@ mod tests {
         assert!(matches!(error, VendorImportError::NoAcceptedRecords));
         assert_eq!(registry_entry_for_label("not-openai.example"), None);
         assert_eq!(registry_entry_for_label("openai.example.invalid"), None);
+        assert_eq!(registry_entry_for_label("chat.z.ai"), Some("app.zai.chat"));
+        assert_eq!(registry_entry_for_label("chat.z.ai.example.invalid"), None);
+        assert_eq!(registry_entry_for_label("docs.z.ai"), None);
     }
 
     #[test]

@@ -185,6 +185,7 @@ fn normalize(
     let ip = parse_optional_ip(record.source_ip.as_deref(), row, "source_ip")?;
     let action = optional_label(record.action.as_deref(), row, "action")?;
     let safe = SafeRecord {
+        request_client: None,
         observed_at: record.observed_at,
         host: Some(host.as_str()),
         destination_ip: None,

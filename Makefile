@@ -23,7 +23,7 @@ help:
 	@echo "  make package     Create a release archive for this host architecture"
 	@echo "  make release-local Build all four release archives on a Mac (no GitHub Actions)"
 	@echo "  make publish-release Tag HEAD and publish the four archives as a GitHub release"
-	@echo "  make push-image  Push the scratch linux/amd64 + linux/arm64 image to $(TALLY_IMAGE_PREFIX)/godel-tally"
+	@echo "  make push-image  Push the linux/amd64 + linux/arm64 upgrade-capable image to $(TALLY_IMAGE_PREFIX)/godel-tally"
 	@echo "Customer installation: bash install.sh --port 2357 (private database downloads by default)"
 
 fmt:

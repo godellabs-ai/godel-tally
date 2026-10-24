@@ -409,6 +409,7 @@ fn base(p: &Projection, config: &VendorImportConfig) -> Observation {
     o
 }
 fn identity(o: &mut Observation, creator: &str, origin: &str, config: &VendorImportConfig) {
+    o.inventory.user_role = Some(tally_core::IdentityRole::Creator);
     o.actor.identity = Some(IdentityObservation {
         subject_key: config.pseudonymization_key.pseudonym_exact(
             "managed_creator",

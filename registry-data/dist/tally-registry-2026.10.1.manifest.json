@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "registry_version": "2026.10.1",
+  "source_sha256": "7cc47af66ac67931eefd36bde4c65bf617e9ba9b335b08b80228210b22bbaefd",
+  "bundle_file": "tally-registry-2026.10.1.json.zst",
+  "bundle_sha256": "0e5f82f3b4782d37f98e4e58a76ba14d783d0ef42f7ab376047f024c7d3c76bf",
+  "compressed_sha256": "913a1d37da2cc64a05aaea37a5d909d3941503fc969118084d82faa8f637c93d",
+  "entry_count": 51,
+  "matcher_count": 29,
+  "fingerprint_count": 6,
+  "compiler_version": "0.1.4"
+}

@@ -1,6 +1,8 @@
 //! PostgreSQL-backed durable state for the AI registry, findings, connectors, scans, and audit.
 
+mod activity;
 mod event_authorization;
+pub mod identity;
 pub use event_authorization::{EventFindingContext, EventRegistryEntity};
 
 use std::{
@@ -158,7 +160,7 @@ const GOVERNANCE_FINDINGS_SQL: &str = r"
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations/postgres");
 
 /// Latest `PostgreSQL` schema version understood by this Tally binary.
-pub const POSTGRES_MIGRATION_HEAD: i64 = 12;
+pub const POSTGRES_MIGRATION_HEAD: i64 = 14;
 
 const RELATIONSHIP_JSON_SELECT: &str = r"
     SELECT jsonb_build_object(
@@ -376,6 +378,7 @@ pub struct EntityResolutionWrite {
 pub enum ConnectorBackfillSourceKind {
     NextdnsApi,
     CloudFlowApi,
+    MicrosoftDefenderApi,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1924,6 +1927,24 @@ impl PostgresStore {
         connector_ids: &[Uuid],
         installation_id: Uuid,
     ) -> Result<(), PostgresStoreError> {
+        for statement in [
+            "DELETE FROM finding_activity WHERE installation_id=$1",
+            "DELETE FROM identity_facts WHERE installation_id=$1",
+            "DELETE FROM identity_device_aliases WHERE installation_id=$1",
+            "DELETE FROM endpoint_process_facts WHERE installation_id=$1",
+            "DELETE FROM inventory_source_presence WHERE installation_id=$1",
+            "DELETE FROM inventory_sync_status WHERE installation_id=$1",
+            "DELETE FROM inventory_presence_events WHERE installation_id=$1",
+            "DELETE FROM identity_links WHERE installation_id=$1",
+            "DELETE FROM identity_corrections WHERE installation_id=$1",
+            "DELETE FROM identity_replay_jobs WHERE installation_id=$1",
+            "DELETE FROM identity_enrichments WHERE installation_id=$1",
+        ] {
+            sqlx::query(statement)
+                .bind(installation_id)
+                .execute(&mut **transaction)
+                .await?;
+        }
         sqlx::query("DELETE FROM tally_estate_reviews WHERE installation_id=$1")
             .bind(installation_id)
             .execute(&mut **transaction)
@@ -2175,6 +2196,8 @@ impl PostgresStore {
         .bind(audit_actor())
         .execute(&mut *transaction)
         .await?;
+        sqlx::query("INSERT INTO identity_replay_jobs(installation_id) SELECT installation_id FROM connector_states WHERE connector_instance_id=$1 ON CONFLICT(installation_id) DO UPDATE SET requested_generation=identity_replay_jobs.requested_generation+1,updated_at=now()")
+            .bind(job.connector_instance_id).execute(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(job_id)
     }
@@ -2675,6 +2698,8 @@ impl PostgresStore {
             .execute(&mut *transaction)
             .await
             .map_err(connector_delete_error)?;
+        sqlx::query("INSERT INTO identity_replay_jobs(installation_id) VALUES($1) ON CONFLICT(installation_id) DO UPDATE SET requested_generation=identity_replay_jobs.requested_generation+1,updated_at=now()")
+            .bind(installation_id).execute(&mut *transaction).await?;
         let deletion = ConnectorDeletion {
             connector_instance_id,
             connector_type,
@@ -3106,7 +3131,18 @@ impl PostgresStore {
         .await?;
         values
             .into_iter()
-            .map(serde_json::from_value)
+            .map(|value| {
+                serde_json::from_value::<ConnectorStateView>(value).map(|mut state| {
+                    if state.health == ConnectorHealth::Healthy
+                        && state
+                            .backlog_seconds(state.last_poll_at.unwrap_or_else(Utc::now))
+                            .is_some_and(|lag| lag > 60)
+                    {
+                        state.health = ConnectorHealth::Delayed;
+                    }
+                    state
+                })
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
@@ -5929,6 +5965,7 @@ pub struct ObservedUsage {
     pub workloads: Vec<WorkloadIdentity>,
     pub user_identity: Option<UserIdentity>,
     pub request_client: Option<RequestClientObservation>,
+    pub activity: Option<tally_core::ActivityAttribution>,
 }
 
 /// Attribution attached to an already-resolved finding subject.
@@ -5947,6 +5984,7 @@ pub struct FindingObservationContext {
     pub workloads: Vec<WorkloadIdentity>,
     pub user_identity: Option<UserIdentity>,
     pub request_client: Option<RequestClientObservation>,
+    pub activity: Option<tally_core::ActivityAttribution>,
 }
 
 impl From<&ObservedUsage> for FindingObservationContext {
@@ -5962,6 +6000,7 @@ impl From<&ObservedUsage> for FindingObservationContext {
             workloads: usage.workloads.clone(),
             user_identity: usage.user_identity.clone(),
             request_client: usage.request_client.clone(),
+            activity: usage.activity.clone(),
         }
     }
 }
@@ -6429,6 +6468,11 @@ impl PostgresStore {
         .execute(&mut **transaction)
         .await?;
 
+        if activity::record_activity(transaction, finding_id, usage).await? {
+            sqlx::query("INSERT INTO identity_replay_jobs(installation_id) VALUES($1) ON CONFLICT(installation_id) DO UPDATE SET requested_generation=identity_replay_jobs.requested_generation+1,updated_at=now()")
+                .bind(usage.installation_id).execute(&mut **transaction).await?;
+        }
+
         for endpoint in &usage.endpoints {
             upsert_finding_endpoint(transaction, finding_id, endpoint, usage.observed_at).await?;
         }
@@ -6796,6 +6840,7 @@ impl PostgresStore {
     /// # Errors
     ///
     /// Returns [`PostgresStoreError`] when the deletion transaction fails.
+    #[allow(clippy::too_many_lines)] // All selected data scopes share one deletion transaction and audit receipt.
     pub async fn delete_data(
         &self,
         scopes: &[String],
@@ -6808,6 +6853,37 @@ impl PostgresStore {
         let mut transaction = self.pool.begin().await?;
         let all = scopes.iter().any(|scope| scope == "all");
         let cutoff = before.unwrap_or_else(Utc::now);
+        if all || scopes.iter().any(|scope| scope == "inventory") {
+            sqlx::query("DELETE FROM identity_links l WHERE installation_id=$1 AND ($2::boolean OR NOT EXISTS(SELECT 1 FROM identity_facts f WHERE f.installation_id=l.installation_id AND f.observation_id=l.observation_id AND f.last_seen>=$3))").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM identity_facts WHERE installation_id=$1 AND ($2::boolean OR last_seen<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM identity_device_aliases a WHERE installation_id=$1 AND ($2::boolean OR NOT EXISTS(SELECT 1 FROM identity_facts f WHERE f.installation_id=a.installation_id AND f.observation_id=a.observation_id AND f.connector_instance_id=a.connector_instance_id))").bind(installation).bind(before.is_none()).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM identity_corrections c WHERE installation_id=$1 AND ($2::boolean OR NOT EXISTS(SELECT 1 FROM identity_facts f WHERE f.installation_id=c.installation_id AND f.entity_id IN (c.subject_id,c.target_id)))").bind(installation).bind(before.is_none()).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM endpoint_process_facts WHERE installation_id=$1 AND ($2::boolean OR observed_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM inventory_presence_events WHERE installation_id=$1 AND ($2::boolean OR observed_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM inventory_source_presence WHERE installation_id=$1 AND ($2::boolean OR last_snapshot_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM inventory_sync_status WHERE installation_id=$1 AND ($2::boolean OR completed_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM identity_enrichments WHERE installation_id=$1")
+                .bind(installation)
+                .execute(&mut *transaction)
+                .await?;
+            sqlx::query("DELETE FROM identity_replay_jobs WHERE installation_id=$1")
+                .bind(installation)
+                .execute(&mut *transaction)
+                .await?;
+        }
+
+        if scopes
+            .iter()
+            .any(|scope| scope == "inventory" || scope == "connectors")
+        {
+            sqlx::query("INSERT INTO identity_replay_jobs(installation_id) VALUES($1) ON CONFLICT(installation_id) DO UPDATE SET requested_generation=identity_replay_jobs.requested_generation+1,updated_at=now()")
+                .bind(installation).execute(&mut *transaction).await?;
+        }
+        if all || scopes.iter().any(|scope| scope == "ai_logs") {
+            sqlx::query("DELETE FROM endpoint_process_facts WHERE installation_id=$1 AND ($2::boolean OR observed_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM finding_activity WHERE installation_id=$1 AND ($2::boolean OR observed_at<$3)").bind(installation).bind(before.is_none()).bind(cutoff).execute(&mut *transaction).await?;
+            sqlx::query("DELETE FROM identity_enrichments e WHERE e.installation_id=$1 AND NOT EXISTS(SELECT 1 FROM finding_activity a WHERE a.installation_id=e.installation_id AND a.observation_id=e.observation_id)").bind(installation).execute(&mut *transaction).await?;
+        }
         if all || scopes.iter().any(|scope| scope == "findings") {
             sqlx::query("DELETE FROM findings WHERE $1::boolean OR last_used_at < $2")
                 .bind(before.is_none())
@@ -7918,6 +7994,13 @@ pub fn connector_backfill_capability(
     config_refs: &serde_json::Value,
 ) -> Option<ConnectorBackfillCapability> {
     let kind = config_refs.get("kind")?.as_str()?;
+    if kind == "microsoft_defender_graph_hunting_v1" {
+        return Some(ConnectorBackfillCapability {
+            source_kind: ConnectorBackfillSourceKind::MicrosoftDefenderApi,
+            minimum_lookback_seconds: 60,
+            maximum_lookback_seconds: 604_800,
+        });
+    }
     if kind == "nextdns_api_v1" {
         return Some(ConnectorBackfillCapability {
             source_kind: ConnectorBackfillSourceKind::NextdnsApi,
@@ -8569,6 +8652,25 @@ pub struct ConnectorStateView {
     pub descriptor: serde_json::Value,
 }
 
+impl ConnectorStateView {
+    /// The last fully committed Graph query boundary, including windows containing no events.
+    pub fn polled_through(&self) -> Option<DateTime<Utc>> {
+        if self.connector_type != "microsoft_defender_edr_api_v1" {
+            return None;
+        }
+        self.cursor_value
+            .strip_prefix("microsoft-defender-v1:")
+            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(DateTime::from_timestamp_millis)
+    }
+
+    /// History left to scan, excluding Graph's five-minute settling interval.
+    pub fn backlog_seconds(&self, now: DateTime<Utc>) -> Option<i64> {
+        self.polled_through()
+            .map(|through| ((now - through).num_seconds() - 300).max(0))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorHealth {
@@ -8873,6 +8975,7 @@ mod tests {
             .await
             .unwrap();
         let mut usage = ObservedUsage {
+            activity: None,
             observation_id: Uuid::now_v7(),
             installation_id,
             provider_key: "openai".to_owned(),
@@ -9440,6 +9543,18 @@ mod tests {
             connector_backfill_preview(&state, 900, at),
             Err(PostgresStoreError::ConnectorBackfillUnsupported)
         ));
+
+        state.job.config_refs = serde_json::json!({"kind":"microsoft_defender_graph_hunting_v1"});
+        let defender = connector_backfill_preview(&state, 604_800, at).unwrap();
+        assert_eq!(
+            defender.source_kind,
+            ConnectorBackfillSourceKind::MicrosoftDefenderApi
+        );
+        assert_eq!(defender.maximum_lookback_seconds, 604_800);
+        assert!(matches!(
+            connector_backfill_preview(&state, 604_801, at),
+            Err(PostgresStoreError::ConnectorBackfillOutOfRange)
+        ));
     }
 
     #[test]
@@ -9529,6 +9644,7 @@ mod tests {
         }
         let at = DateTime::from_timestamp_micros(Utc::now().timestamp_micros()).unwrap();
         let first = ObservedUsage {
+            activity: None,
             observation_id: Uuid::now_v7(),
             installation_id,
             provider_key: "openai".into(),

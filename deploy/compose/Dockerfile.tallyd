@@ -29,12 +29,24 @@ RUN apt-get update \
     && chmod 1777 /rootfs/tmp \
     && chown 65532:65532 /rootfs/data
 
-FROM scratch AS runtime
+FROM debian:trixie-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      bash ca-certificates curl python3 openssl coreutils findutils sed gawk grep \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable\n' "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/docker.list \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /etc/apt/keyrings/postgresql.asc \
+    && printf 'deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main\n' > /etc/apt/sources.list.d/postgresql.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin postgresql-client-18 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 65532 tally && useradd --uid 65532 --gid tally --home-dir /data --no-create-home --shell /usr/sbin/nologin tally
+COPY scripts/ /opt/tally/scripts/
+COPY docker-compose.yml docker-compose.dev.yml /opt/tally/
 LABEL org.opencontainers.image.source="https://github.com/godellabs-ai/godel-tally" \
       org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=runtime-files /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=runtime-files /rootfs/ /
-ENV HOME=/data SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV TALLY_UPGRADE_TALLY_ROOT=/opt/tally TALLY_BINARY=/usr/local/bin/tallyd HOME=/data SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 WORKDIR /data
 EXPOSE 2357
 # Starts as root only to stage a supplied certificate, then runs tallyd as 65532.

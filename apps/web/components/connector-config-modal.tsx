@@ -39,6 +39,7 @@ import {
 } from "../lib/connector-catalog";
 import { VendorBadge, getVendorFromIdentifier } from "./vendor-icon";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "../lib/datetime";
 
 export type ConnectorSchemaField = {
   name: string;
@@ -71,6 +72,10 @@ export type ConnectorSchema = ConnectorDefinition & {
 };
 
 export const CONNECTOR_SCHEMAS: Record<ConnectorSchemaId, ConnectorSchema> = {
+  iru_inventory: { ...getConnectorDefinitionBySchemaId("iru_inventory"), source_kind: "mdm_inventory", permissions: ["Device list/detail and assignment read permission. Kandji API origins remain supported by Iru."], fields: [{"name": "provider", "label": "Provider", "type": "text", "defaultValue": "iru", "hidden": true}, {"name": "base_url", "label": "API origin", "type": "text", "defaultValue": "https://tenant.api.kandji.io", "hidden": false}, {"name": "tenant_id", "label": "Organization / tenant ID", "type": "text", "help": "Used to scope inventory identifiers. Use the source organization ID."}, {"name": "api_token", "label": "Read-only API token", "type": "secret"}] },
+  addigy_inventory: { ...getConnectorDefinitionBySchemaId("addigy_inventory"), source_kind: "mdm_inventory", permissions: ["View Devices permission for the selected organization; read-only search through API v2."], fields: [{"name": "provider", "label": "Provider", "type": "text", "defaultValue": "addigy", "hidden": true}, {"name": "base_url", "label": "API origin", "type": "text", "defaultValue": "https://api.addigy.com", "hidden": true}, {"name": "tenant_id", "label": "Organization / tenant ID", "type": "text", "help": "Used to scope inventory identifiers. Use the source organization ID."}, {"name": "api_token", "label": "Read-only API token", "type": "secret"}] },
+  intune_inventory: { ...getConnectorDefinitionBySchemaId("intune_inventory"), source_kind: "mdm_inventory", permissions: ["DeviceManagementManagedDevices.Read.All application permission with administrator consent and an active Intune license. IP addresses are not promised by this v1.0 source."], fields: [{"name": "provider", "label": "Provider", "type": "text", "defaultValue": "intune", "hidden": true}, {"name": "base_url", "label": "API origin", "type": "text", "defaultValue": "https://graph.microsoft.com", "hidden": true}, {"name": "tenant_id", "label": "Directory tenant ID", "type": "text", "help": "Used to scope inventory identifiers. Use the source organization ID."}, {"name": "client_id", "label": "Application client ID", "type": "text"}, {"name": "client_secret", "label": "Application client secret", "type": "secret"}] },
+  jamf_inventory: { ...getConnectorDefinitionBySchemaId("jamf_inventory"), source_kind: "mdm_inventory", permissions: ["Jamf Platform API devices:read for v4 computers-inventory. Classic/on-prem Jamf Pro APIs are not supported by this connector."], fields: [{"name": "provider", "label": "Provider", "type": "text", "defaultValue": "jamf", "hidden": true}, {"name": "base_url", "label": "API origin", "type": "text", "defaultValue": "https://us.api.jamfcloud.com", "hidden": false}, {"name": "tenant_id", "label": "Organization / tenant ID", "type": "text", "help": "Used to scope inventory identifiers. Use the source organization ID."}, {"name": "api_token", "label": "Read-only API token", "type": "secret"}] },
   gemini_agents: {
     ...getConnectorDefinitionBySchemaId("gemini_agents"),
     source_kind: "managed_agents",
@@ -1320,10 +1325,13 @@ function ConfiguredConnectorSidebar({
                       <span>{connector.records_read_total.toLocaleString()} records</span>
                     </div>
                     <p className="mt-1.5 text-[10px] text-muted-foreground">
-                      {connector.last_success_at
-                        ? `Last synced ${formatTimeAgo(connector.last_success_at)}`
-                        : "Never synced"}
+                      {connector.last_poll_at
+                        ? `Last checked ${formatTimeAgo(connector.last_poll_at)}`
+                        : "Never checked"}
                     </p>
+                    {connector.polled_through && <p className="mt-1 text-[10px] text-muted-foreground">
+                      History checked through {formatDateTime(connector.polled_through)}
+                    </p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
                     <Button

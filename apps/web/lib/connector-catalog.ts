@@ -5,6 +5,7 @@ export type ConnectorCategoryId =
   | "infrastructure";
 
 export type ConnectorSchemaId =
+  | "iru_inventory" | "addigy_inventory" | "intune_inventory" | "jamf_inventory"
   | "servicenow_agents"
   | "n8n_agents"
   | "copilot_studio_agents"
@@ -67,6 +68,11 @@ export const CONNECTOR_CATEGORIES: ReadonlyArray<{
 ];
 
 export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
+  { schemaId: "iru_inventory", title: "Iru device inventory", vendorIdentifier: "iru", description: "Read-only device and user inventory with source timestamps and explicit identity roles.", category: "infrastructure", connectorTypes: ["iru_inventory_v1"] },
+  { schemaId: "addigy_inventory", title: "Addigy device inventory", vendorIdentifier: "addigy", description: "Read-only device and user inventory with source timestamps and explicit identity roles.", category: "infrastructure", connectorTypes: ["addigy_inventory_v1"] },
+  { schemaId: "intune_inventory", title: "Microsoft Intune inventory", vendorIdentifier: "intune", description: "Read-only device and user inventory with source timestamps and explicit identity roles.", category: "infrastructure", connectorTypes: ["intune_inventory_v1"] },
+  { schemaId: "jamf_inventory", title: "Jamf Platform inventory", vendorIdentifier: "jamf", description: "Read-only device and user inventory with source timestamps and explicit identity roles.", category: "infrastructure", connectorTypes: ["jamf_inventory_v1"] },
+
   { schemaId: "gemini_agents", title: "Gemini AI Studio Managed Agents", vendorIdentifier: "gcp", description: "Discover agents saved in Google AI Studio through the Gemini Agents API.", category: "ai-platforms", connectorTypes: ["gemini_agents_api_v1"] },
   { schemaId: "claude_agents", title: "Claude Managed Agents", vendorIdentifier: "anthropic", description: "Discover saved agents, configured models and archived state from a Claude workspace.", category: "ai-platforms", connectorTypes: ["claude_agents_api_v1"] },
   { schemaId: "openai_agents", title: "OpenAI Agents", vendorIdentifier: "openai", description: "Discover saved agents and their configured models from an OpenAI project.", category: "ai-platforms", connectorTypes: ["openai_agents_api_v1"] },

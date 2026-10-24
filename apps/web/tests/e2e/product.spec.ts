@@ -101,4 +101,22 @@ test("retired product routes are gone", async ({ page }) => {
     const response = await page.goto(path);
     expect(response?.status()).toBe(404);
   }
+  const inventory = await page.request.get("/api/v1/tally/inventory");
+  expect(inventory.status()).toBe(404);
+  for (const path of [
+    "/api/v1/tally/inventory/corrections",
+    "/api/v1/tally/inventory/corrections/00000000-0000-0000-0000-000000000000/undo",
+  ]) {
+    const response = await page.request.post(path, {
+      headers: { origin: new URL(page.url()).origin },
+      data: {},
+    });
+    expect(response.status()).toBe(404);
+  }
+  await page.goto("/");
+  await expect(page.locator('a[href^="/inventory"]')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeVisible();
+  await expect(page.locator('a[href^="/inventory"]')).toHaveCount(0);
 });

@@ -5,6 +5,7 @@
 mod data_preview;
 mod estate;
 mod event_stream;
+mod identity;
 mod sample_data;
 pub use estate::{read_inventory as estate_inventory, retain_ai_observations, with_clickhouse};
 
@@ -283,11 +284,11 @@ pub fn embedded_registry() -> anyhow::Result<(RegistryBundle, RegistryManifest)>
     use anyhow::Context as _;
 
     let manifest = serde_json::from_str::<RegistryManifest>(include_str!(
-        "../../../registry-data/dist/tally-registry-2026.08.5.manifest.json"
+        "../../../registry-data/dist/tally-registry-2026.10.1.manifest.json"
     ))
     .context("parse embedded Tally registry manifest")?;
     let bundle = verify_artifact(
-        include_bytes!("../../../registry-data/dist/tally-registry-2026.08.5.json.zst"),
+        include_bytes!("../../../registry-data/dist/tally-registry-2026.10.1.json.zst"),
         &manifest,
     )
     .context("verify embedded Tally registry artifact")?;
@@ -331,6 +332,14 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/v1/tally/registry/models", get(registry_models))
         .route("/api/v1/tally/registry/sanctions", post(registry_sanction))
         .route("/api/v1/tally/findings", get(findings))
+        .route(
+            "/api/v1/tally/findings/{finding_id}/activity",
+            get(identity::activity),
+        )
+        .route(
+            "/api/v1/tally/connectors/capabilities",
+            get(identity::capabilities),
+        )
         .route(
             "/api/v1/tally/event-stream",
             get(event_stream::event_stream),
@@ -3897,6 +3906,51 @@ fn connector_schedule_source_with_existing(
         ));
     }
     match source {
+        ConnectorScheduleSourceInput::MdmInventory {
+            provider,
+            base_url,
+            tenant_id,
+            api_token,
+            client_id,
+            client_secret,
+        } => {
+            if !tally_connectors::valid_mdm_origin(*provider, base_url)
+                || tenant_id.is_empty()
+                || tenant_id.len() > 256
+                || !tenant_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+            {
+                return Err(schedule_invalid());
+            }
+            let mut credentials = credential_bundle([
+                ("base_url", base_url.as_str()),
+                ("tenant_id", tenant_id.as_str()),
+            ]);
+            if *provider == tally_connectors::MdmProvider::Jamf {
+                uuid::Uuid::parse_str(tenant_id).map_err(|_| schedule_invalid())?;
+            }
+            if *provider == tally_connectors::MdmProvider::Intune {
+                uuid::Uuid::parse_str(tenant_id).map_err(|_| schedule_invalid())?;
+                uuid::Uuid::parse_str(client_id).map_err(|_| schedule_invalid())?;
+                credentials.insert("client_id".into(), client_id.clone());
+                credentials.insert(
+                    "client_secret".into(),
+                    retained_credential(client_secret, existing_credentials, "client_secret")?,
+                );
+            } else {
+                credentials.insert(
+                    "api_token".into(),
+                    retained_credential(api_token, existing_credentials, "api_token")?,
+                );
+            }
+            Ok(ConnectorSchedulePlan {
+                descriptor: provider.descriptor(),
+                config_refs: serde_json::json!({"kind":"mdm_inventory_v1","provider":provider,"source_lineage_id":format!("mdm:{}",provider.name())}),
+                credentials,
+                identity_suffix: Some(credential_identity(&[provider.name(), base_url, tenant_id])),
+            })
+        }
         ConnectorScheduleSourceInput::NextdnsApi {
             profile_id,
             api_key,
@@ -5527,6 +5581,14 @@ fn connector_form_configuration(
         return fields;
     };
     match kind {
+        "mdm_inventory_v1" => {
+            add_reference_fields(&mut fields, config_refs, &["provider"]);
+            add_credential_fields(
+                &mut fields,
+                credentials,
+                &["base_url", "tenant_id", "client_id"],
+            );
+        }
         "file_env_v1" => {
             add_reference_fields(&mut fields, config_refs, &["adapter", "region"]);
             add_credential_fields(&mut fields, credentials, &["account_id", "scope_id"]);
@@ -5922,8 +5984,9 @@ fn correlate_cloud_flows(
         };
         usage.observation_id = flow.observation_id;
         usage.connector_instance_id = flow.connector.instance_id;
-        usage.observed_at = invocation.observed_at;
+        usage.observed_at = flow.observed_at;
         usage.counts_as_usage = false;
+        usage.activity = Some(tally_core::ActivityAttribution::from(*flow));
         usage.endpoints.clear();
         let (source_hostname, source_ip) = if flow.network.direction == Some(FlowDirection::Ingress)
         {
@@ -6332,6 +6395,7 @@ fn usage_from_observation(
         Vec::new()
     };
     Ok(Some(ObservedUsage {
+        activity: Some(tally_core::ActivityAttribution::from(observation)),
         observation_id: observation.observation_id,
         installation_id: observation.installation_id,
         provider_key,
@@ -6717,6 +6781,10 @@ fn import_preview_response(
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportAdapterInput {
+    IruInventory,
+    AddigyInventory,
+    IntuneInventory,
+    JamfInventory,
     DefenderStream,
     ServicenowAgents,
     N8nAgents,
@@ -6770,6 +6838,10 @@ pub enum ImportAdapterInput {
 impl ImportAdapterInput {
     fn descriptor(self) -> ConnectorDescriptor {
         match self {
+            Self::IruInventory => tally_connectors::MdmProvider::Iru.descriptor(),
+            Self::AddigyInventory => tally_connectors::MdmProvider::Addigy.descriptor(),
+            Self::IntuneInventory => tally_connectors::MdmProvider::Intune.descriptor(),
+            Self::JamfInventory => tally_connectors::MdmProvider::Jamf.descriptor(),
             Self::DefenderStream => tally_connectors::defender_stream_descriptor(),
             Self::ServicenowAgents => tally_connectors::managed_agents_descriptor("servicenow"),
             Self::N8nAgents => tally_connectors::managed_agents_descriptor("n8n"),
@@ -6869,6 +6941,7 @@ impl ImportAdapterInput {
         matches!(self.cloud_transport(), ManagedCloudTransport::NativeApi)
     }
 
+    #[allow(clippy::too_many_lines)] // Exhaustive connector adapter dispatch.
     fn normalize_vendor(
         self,
         input: &[u8],
@@ -6884,6 +6957,24 @@ impl ImportAdapterInput {
             | Self::ClaudeAgents
             | Self::GeminiAgents
             | Self::DifyAgents => tally_connectors::import_managed_agents_json(input, config),
+            Self::IruInventory => {
+                tally_connectors::import_mdm_json(input, tally_connectors::MdmProvider::Iru, config)
+            }
+            Self::AddigyInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Addigy,
+                config,
+            ),
+            Self::IntuneInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Intune,
+                config,
+            ),
+            Self::JamfInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Jamf,
+                config,
+            ),
             Self::Nextdns => import_nextdns_csv(input, config),
             Self::NextdnsApi => import_nextdns_api_json(input, config),
             Self::CloudflareGateway => import_cloudflare_gateway_ndjson(input, config),
@@ -7362,6 +7453,19 @@ async fn data_inventory(
         .estate_count()
         .await
         .map_err(ApiError::dependency)?;
+    inventory.inventory_entities += state
+        .postgres
+        .identity_inventory_count(
+            state
+                .postgres
+                .get_or_create_installation_identity()
+                .await
+                .map_err(ApiError::dependency)?
+                .installation_id,
+            None,
+        )
+        .await
+        .map_err(ApiError::dependency)?;
     Ok(Json(inventory))
 }
 
@@ -7447,6 +7551,19 @@ async fn delete_data(
     inventory.inventory_entities = state
         .observations
         .estate_count()
+        .await
+        .map_err(ApiError::dependency)?;
+    inventory.inventory_entities += state
+        .postgres
+        .identity_inventory_count(
+            state
+                .postgres
+                .get_or_create_installation_identity()
+                .await
+                .map_err(ApiError::dependency)?
+                .installation_id,
+            None,
+        )
         .await
         .map_err(ApiError::dependency)?;
     Ok(Json(inventory))
@@ -9308,6 +9425,17 @@ pub struct ConnectorScheduleRequest {
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "source_kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ConnectorScheduleSourceInput {
+    MdmInventory {
+        provider: tally_connectors::MdmProvider,
+        base_url: String,
+        tenant_id: String,
+        #[serde(default)]
+        api_token: String,
+        #[serde(default)]
+        client_id: String,
+        #[serde(default)]
+        client_secret: String,
+    },
     ManagedAgents {
         platform: String,
         base_url: String,
@@ -9845,6 +9973,9 @@ pub struct ConnectorStateResponse {
     pub last_poll_at: Option<DateTime<Utc>>,
     pub last_source_at: Option<DateTime<Utc>>,
     pub lag_seconds: Option<i64>,
+    /// Last committed history boundary, including empty windows; separate from source freshness.
+    pub polled_through: Option<DateTime<Utc>>,
+    pub backlog_seconds: Option<i64>,
     pub records_read_total: i64,
     pub accepted_total: i64,
     pub ignored_total: i64,
@@ -10101,6 +10232,8 @@ pub struct ProblemDetails {
 
 impl From<tally_store_postgres::ConnectorStateView> for ConnectorStateResponse {
     fn from(value: tally_store_postgres::ConnectorStateView) -> Self {
+        let polled_through = value.polled_through();
+        let backlog_seconds = value.backlog_seconds(Utc::now());
         Self {
             sample: false,
             connector_instance_id: value.connector_instance_id,
@@ -10115,6 +10248,8 @@ impl From<tally_store_postgres::ConnectorStateView> for ConnectorStateResponse {
             last_poll_at: value.last_poll_at,
             last_source_at: value.last_source_at,
             lag_seconds: value.lag_seconds,
+            polled_through,
+            backlog_seconds,
             records_read_total: value.records_read_total,
             accepted_total: value.accepted_total,
             ignored_total: value.ignored_total,
@@ -10365,6 +10500,7 @@ pub enum OverviewState {
         version = "0.1.4"
     ),
     paths(
+        identity::capabilities, identity::activity,
         estate::inventory,
         estate::activity,
         event_stream::event_stream,
@@ -11157,7 +11293,7 @@ mod tests {
     #[test]
     fn integration_capability_manifest_is_bounded_read_only_and_content_free() {
         let registry: RegistryManifest = serde_json::from_str(include_str!(
-            "../../../registry-data/dist/tally-registry-2026.08.5.manifest.json"
+            "../../../registry-data/dist/tally-registry-2026.10.1.manifest.json"
         ))
         .expect("registry manifest");
         let manifest = build_integration_capability_manifest(
@@ -11212,6 +11348,8 @@ mod tests {
         let document = serde_json::to_value(openapi()).expect("OpenAPI JSON");
         let paths = document["paths"].as_object().expect("OpenAPI paths");
         let expected = [
+            "/api/v1/tally/findings/{finding_id}/activity",
+            "/api/v1/tally/connectors/capabilities",
             "/api/v1/tally/estate",
             "/api/v1/tally/estate/activity",
             "/api/v1/tally/estate/activity/query",
@@ -11253,6 +11391,11 @@ mod tests {
         assert!(encoded.contains("findings_updated"));
         assert!(!paths.contains_key("/api/v1/tally/registry/decisions"));
         assert!(!paths.contains_key("/api/v1/tally/estate/logs"));
+        assert!(
+            paths
+                .keys()
+                .all(|path| !path.starts_with("/api/v1/tally/inventory"))
+        );
         let sanction_schema = &document["components"]["schemas"]["RegistrySanctionRequest"];
         assert_eq!(
             sanction_schema["required"],

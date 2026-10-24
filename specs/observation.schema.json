@@ -22,6 +22,9 @@
       "type": "string",
       "format": "uuid"
     },
+    "inventory": {
+      "$ref": "#/$defs/InventoryObservation"
+    },
     "kind": {
       "$ref": "#/$defs/ObservationKind"
     },
@@ -38,6 +41,9 @@
     },
     "outcome": {
       "$ref": "#/$defs/OutcomeObservation"
+    },
+    "process": {
+      "$ref": "#/$defs/ProcessObservation"
     },
     "received_at": {
       "type": "string",
@@ -131,6 +137,51 @@
           ]
         }
       }
+    },
+    "AddressObservation": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "network_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/AddressRole"
+        },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "role",
+        "valid_from"
+      ]
+    },
+    "AddressRole": {
+      "type": "string",
+      "enum": [
+        "observed_source",
+        "local_interface",
+        "public_egress",
+        "proxy",
+        "warp",
+        "unknown"
+      ]
     },
     "AgentObservation": {
       "description": "Allowlisted agent metadata. Command lines are inspected transiently; only a recognized\nexecutable/package signature is retained, never arbitrary arguments or source content.",
@@ -423,6 +474,14 @@
         }
       }
     },
+    "DeviceIdentifierKind": {
+      "type": "string",
+      "enum": [
+        "source_native",
+        "client_supplied",
+        "hostname_alias"
+      ]
+    },
     "DigestAlgorithm": {
       "type": "string",
       "enum": [
@@ -602,12 +661,129 @@
         "subject_key"
       ]
     },
+    "IdentityRole": {
+      "type": "string",
+      "enum": [
+        "associated_user",
+        "request_actor",
+        "process_account",
+        "assigned_owner",
+        "primary_user",
+        "enrolled_by",
+        "last_logged_in",
+        "service_principal",
+        "cloud_principal",
+        "creator",
+        "key_owner"
+      ]
+    },
     "IdentitySubjectKind": {
       "type": "string",
       "enum": [
         "user_name",
         "source_user_id"
       ]
+    },
+    "InventoryIdentifier": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ]
+    },
+    "InventoryObservation": {
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AddressObservation"
+          }
+        },
+        "device_key_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeviceIdentifierKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directory_tenant_key": {
+          "description": "Installation-HMAC directory scope, only when the source identifies the directory tenant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display_name": {
+          "description": "Bounded device display name, separate from a validated hostname/FQDN.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InventoryIdentifier"
+          }
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported_at": {
+          "description": "Device report/check-in time, distinct from when an inventory assignment was observed.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "retired": {
+          "type": "boolean",
+          "default": false
+        },
+        "snapshot_at": {
+          "description": "Set only by a successfully completed, bounded inventory snapshot.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "user_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
     },
     "NetworkObservation": {
       "type": "object",
@@ -771,6 +947,55 @@
           ]
         }
       }
+    },
+    "ProcessObservation": {
+      "type": "object",
+      "properties": {
+        "executable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_executable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_pid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_unique_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "unique_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "RequestClientKind": {
       "description": "Allowlisted public client/framework names, never arbitrary user-agent text.",

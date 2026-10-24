@@ -86,6 +86,28 @@ struct EdrDnsProjection {
 
 #[derive(Serialize)]
 struct EdrDnsProjectionEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    executable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_unique_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_executable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_unique_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remote_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remote_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_started_at: Option<DateTime<Utc>>,
     id: String,
     observed_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -281,9 +303,9 @@ async fn read_search_events(
 fn edr_dns_query(record_limit: usize) -> String {
     format!(
         r"#repo=base_sensor
-| #event_simpleName=DnsRequest
+| (#event_simpleName=DnsRequest OR #event_simpleName=NetworkConnectIP4 OR #event_simpleName=NetworkConnectIP6 OR #event_simpleName=ProcessRollup2)
 | sort(@timestamp, order=asc, limit={record_limit})
-| select([@id, @timestamp, DomainName, ComputerName, UserName, aid])"
+| select([@id, @timestamp, #event_simpleName, DomainName, ComputerName, UserName, aid, ContextProcessId, TargetProcessId, RawProcessId, ParentProcessId, ImageFileName, ParentBaseFileName, ProcessStartTime, LocalAddressIP4, LocalAddressIP6, RemoteAddressIP4, RemoteAddressIP6, RemotePort, Protocol])"
     )
 }
 
@@ -298,7 +320,43 @@ fn project_event(
     if observed_at < window_start || observed_at >= window_end {
         return None;
     }
+    let token = |names: &[&str]| {
+        attribute_value(&event.attributes, names)
+            .and_then(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .or_else(|| v.as_u64().map(|v| v.to_string()))
+            })
+            .filter(|v| bounded_value(v, 128))
+    };
+    let process_started_at =
+        attribute_value(&event.attributes, &["ProcessStartTime"]).and_then(parse_process_timestamp);
+    let event_kind = projected_string(
+        &event.attributes,
+        &["#event_simpleName", "event_simpleName"],
+    );
+    let native_process_field = if event_kind.as_deref() == Some("ProcessRollup2") {
+        "TargetProcessId"
+    } else {
+        "ContextProcessId"
+    };
     let mut projected = EdrDnsProjectionEvent {
+        event_kind,
+        executable: projected_string(&event.attributes, &["ImageFileName"])
+            .as_deref()
+            .and_then(tally_core::ProcessObservation::executable_basename),
+        process_id: token(&["RawProcessId"]),
+        process_unique_id: token(&[native_process_field]),
+        parent_executable: projected_string(&event.attributes, &["ParentBaseFileName"])
+            .as_deref()
+            .and_then(tally_core::ProcessObservation::executable_basename),
+        parent_unique_id: token(&["ParentProcessId"]),
+        source_ip: projected_string(&event.attributes, &["LocalAddressIP4", "LocalAddressIP6"]),
+        remote_ip: projected_string(&event.attributes, &["RemoteAddressIP4", "RemoteAddressIP6"]),
+        protocol: token(&["Protocol"]),
+        remote_port: token(&["RemotePort"]).and_then(|v| v.parse().ok()),
+        process_started_at,
+
         id: attribute_string(&event.attributes, &["@id", "id", "event_id"])
             .filter(|value| bounded_value(value, 512))
             .unwrap_or_default(),
@@ -339,6 +397,31 @@ fn attribute_string(attributes: &Map<String, Value>, paths: &[&str]) -> Option<S
 
 fn projected_string(attributes: &Map<String, Value>, paths: &[&str]) -> Option<String> {
     attribute_string(attributes, paths).filter(|value| bounded_value(value, 512))
+}
+
+fn parse_process_timestamp(value: &Value) -> Option<DateTime<Utc>> {
+    let raw = value
+        .as_str()
+        .map(str::to_owned)
+        .or_else(|| value.as_number().map(ToString::to_string))?;
+    if let Ok(timestamp) = raw.parse::<DateTime<Utc>>() {
+        return Some(timestamp);
+    }
+    if let Some((seconds, fraction)) = raw.split_once('.') {
+        if fraction.len() > 9 || !fraction.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let nanos = format!("{fraction:0<9}").parse().ok()?;
+        return DateTime::from_timestamp(seconds.parse().ok()?, nanos);
+    }
+    let epoch = raw.parse::<i64>().ok()?;
+    if (1_000_000_000_000..10_000_000_000_000).contains(&epoch) {
+        DateTime::from_timestamp_millis(epoch)
+    } else if (1_000_000_000..10_000_000_000).contains(&epoch) {
+        DateTime::from_timestamp(epoch, 0)
+    } else {
+        None
+    }
 }
 
 fn parse_timestamp(value: &Value) -> Option<DateTime<Utc>> {
@@ -385,14 +468,16 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn query_is_fixed_to_edr_dns_events_and_allowlisted_fields() {
+    fn query_requests_dns_network_and_process_events_with_allowlisted_fields() {
         let query = edr_dns_query(500);
         assert!(query.contains("#repo=base_sensor"));
         assert!(query.contains("#event_simpleName=DnsRequest"));
         assert!(query.contains("limit=500"));
         assert!(query.contains("DomainName"));
         assert!(!query.contains("CommandLine"));
-        assert!(!query.contains("FileName"));
+        assert!(query.contains("ImageFileName"));
+        assert!(query.contains("ContextProcessId"));
+        assert!(query.contains("ProcessRollup2"));
     }
 
     #[test]
@@ -418,6 +503,28 @@ mod tests {
         assert!(serialized.contains("analyst@example.com"));
         assert!(!serialized.contains("must never survive"));
         assert!(!serialized.contains("SHA256HashData"));
+    }
+
+    #[test]
+    fn process_and_connection_events_share_native_process_keys_without_commands() {
+        let start = "2026-09-07T09:00:00Z".parse().unwrap();
+        let end = "2026-09-07T11:00:00Z".parse().unwrap();
+        let project = |kind: &str, native: &str| {
+            let mut attributes = serde_json::json!({"@id":kind,"#event_simpleName":kind,"aid":"sensor-1","ComputerName":"host-1","RawProcessId":"42","ParentProcessId":"parent-1","ImageFileName":"/usr/bin/curl","ProcessStartTime":"1788775200.123","LocalAddressIP4":"10.0.0.8","RemoteAddressIP4":"10.0.0.9","RemotePort":"443","CommandLine":"PRIVATE-COMMAND"});
+            attributes[native] = serde_json::json!("native-7");
+            let event: SearchEvent = serde_json::from_value(
+                serde_json::json!({"timestamp":1_788_775_200_000_i64,"attributes":attributes}),
+            )
+            .unwrap();
+            project_event(&event, start, end).unwrap()
+        };
+        let process = serde_json::to_value(project("ProcessRollup2", "TargetProcessId")).unwrap();
+        let network =
+            serde_json::to_value(project("NetworkConnectIP4", "ContextProcessId")).unwrap();
+        assert_eq!(process["process_unique_id"], network["process_unique_id"]);
+        assert_eq!(process["process_id"], "42");
+        assert_eq!(process["executable"], "curl");
+        assert!(!process.to_string().contains("PRIVATE-COMMAND"));
     }
 
     #[tokio::test]

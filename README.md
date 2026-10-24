@@ -91,7 +91,7 @@ are supported too. To run everything in containers instead, see
 
 As an alternative to the binary installer, run Tally, PostgreSQL, and ClickHouse with Docker Compose.
 The Tally image is published as `quay.io/godellabs-ai/godel-tally` for linux/amd64 and linux/arm64;
-the application runs from a `scratch` image with a static binary and CA certificates. Every setting lives in `.env` beside the Compose file, so create it first:
+the application uses a slim Debian image with a static application binary, CA certificates, and the client tools needed for a UI-driven Gate upgrade. It includes Docker CLI/Compose and PostgreSQL clients, without a Docker or containerd server. Every setting lives in `.env` beside the Compose file, so create it first:
 
 ```bash
 mkdir -p ~/godel-tally && cd ~/godel-tally
@@ -116,7 +116,7 @@ docker compose exec tallyd /usr/local/bin/tallyd healthcheck
 ```
 
 The built-in probe connects to the internal listener without a proxy or public DNS lookup and verifies
-the HTTPS certificate. The image has no shell or curl. Keep the `.env` and data volumes when retrying.
+the HTTPS certificate. Keep the `.env` and data volumes when retrying.
 
 Tally creates a self-signed certificate on first start; put `tally.crt` and `tally.key` in the `tls`
 folder beside the Compose file to use your own. On an Apple silicon Mac with macOS 26, the same `.env`
@@ -297,6 +297,93 @@ it does not, by itself, block a request at a provider, gateway, or endpoint.
 Gödel Gate adds enforcement capabilities and embeds Tally's discovery components. The Tally
 deletion screen uses the same target → preview → confirmation flow in both products. The
 [upgrade guide](https://godel-labs.ai/docs/tally/upgrade-to-gate) explains the cutover and migration boundaries. Gate requires Docker.
+
+## Activity attribution and local identity inventory
+
+The finding drawer keeps each event's user, device, process, agent signature, client hint and model together, with source receipts and per-field provenance. Missing fields stay unavailable. Independent finding summaries are never combined into invented request chains. Later source revisions can fill missing context; conflicting values remain reviewable.
+
+**Connector identity correlation** records minimal identity facts before AI admission, including non-AI endpoint evidence. Inventory does not require MDM and does not add AI usage. It preserves typed user roles, scoped device identifiers, IPv4/IPv6 address roles, source report times, snapshot times and history. Native IDs are scoped to installation, connector and tenant. Explicit matching Entra tenant/device IDs can reconcile Defender and Intune. Hostnames, serials, public IPs and differently hashed source IDs never cause automatic merges. IP-only candidates remain ambiguous, even if the local inventory contains one matching device. Process enrichment requires the same scoped endpoint and native process ID, or PID with exact start time; an owner is never promoted to request actor.
+
+For **Microsoft Defender on macOS**, successful Graph authentication alone does not establish
+endpoint readiness. Approve the Endpoint Security and Network extensions and Full Disk Access,
+then verify `mdatp health` reports healthy. Enable Network Protection in audit or block mode to
+collect destination-domain telemetry; see [Microsoft's deployment guidance](https://learn.microsoft.com/en-us/defender-endpoint/network-protection-macos).
+Network connections can establish the contacted AI service and source process, but not the model
+used. Unspecified addresses and unavailable native process IDs are omitted from attribution;
+PID plus creation time identifies the process when a native ID is unavailable.
+
+Defender history is read in windows of up to one day, with five minutes reserved for source
+settling. Windows exceeding the configured row limit are bisected and retried before the cursor
+advances. The connector shows the history boundary even when a window contains no events.
+The connector job's `backfill/preview` and `backfill` APIs support a 60–604800 second replay,
+preserving existing evidence. Replaying source records can restore executable names discarded
+by an older parser; the migration alone cannot reconstruct fields that were never retained.
+
+Source facts remain intact. Historical re-enrichment uses durable, bounded generations and does not increment usage. Disabled or removed sources stop contributing derived context. Existing aggregate findings retain their labels; their original event associations cannot be reconstructed retroactively.
+
+Read-only MDM sources are available in the connector catalog:
+
+| Source | Collection and permissions | Boundary |
+| --- | --- | --- |
+| Iru | Tenant Kandji US/EU API, device list and detail read; assigned-user metadata | Device-family fields vary; no device secrets or management actions |
+| Addigy | API v2 organization device search, `x-api-key`, selected facts, complete pagination | Read-only POST search; local/current and IdP-associated account facts are distinct from request actors |
+| Intune | Microsoft Graph v1.0 managedDevices, application `DeviceManagementManagedDevices.Read.All`, licensed tenant | Associated user is not assumed primary/active; no beta hardware/current-IP dependency |
+| Jamf | Regional Jamf Platform `/pro/v4/computers-inventory`, `X-Tenant-Id`, `devices:read` | v4 computer inventory only; Classic/on-prem endpoints are not enabled |
+
+All four sources use sealed credentials, scheduled full snapshots, bounded retries and strict projections. Failed/partial snapshots do not retire missing devices. A successful empty snapshot retires only that source's presence. Source device check-in is distinct from collection time; absent check-in stays unknown. Credential rotation uses the existing connector edit flow. LiteLLM can persist explicit device/hostname fields under `metadata.spend_logs_metadata`; a request body/header field that the gateway does not log remains unavailable in Tally.
+
+[Connector capabilities](specs/connector-capabilities.json) maps every catalog entry, transport and additional import/scanner surface to implementation paths and evidence boundaries. `GET /api/v1/tally/connectors/capabilities` adds observed field coverage for this installation. Static and fixture coverage does not certify a live vendor deployment.
+
+Identity history defaults to 365 days (`TALLY_IDENTITY_HISTORY_RETENTION_DAYS`); the latest durable source fact is retained. Activity/process history defaults to 90 days (`TALLY_AI_LOG_RETENTION_DAYS`). Inventory deletion removes source facts, aliases, relationships, corrections and derived context; AI-log deletion removes event associations, revisions and process history while retaining the durable inventory. Retention never deletes source data in a vendor system.
+
+## Gate upgrade deployment contract
+
+The Compose upgrade path requires an accessible **local Docker Engine socket** and a writable host deployment root mounted at the **same absolute path** inside Tally. The UI launches a fixed-purpose same-image helper that shares source mounts, retains receipts in `/data/upgrade`, uses the source network and survives retiring Tally. Staging certificates and installer files live under the host deployment root so the host Docker daemon can mount them. PostgreSQL credentials and health checks use the appropriate container/network addresses.
+
+Set these in `.env` before adopting the new Compose configuration:
+
+```dotenv
+TALLY_DEPLOYMENT_ROOT=/absolute/host/path/tally-deploy
+TALLY_DOCKER_SOCKET=/var/run/docker.sock
+```
+
+Create that dedicated deployment directory and grant the configured Tally UID (65532 in the published image) write access using ownership or an ACL. Do not change ownership of unrelated directories. Docker Desktop, Colima and rootless engines may use a different socket path; set `TALLY_DOCKER_SOCKET` to the actual local socket. Tally preserves its numeric socket group when dropping privileges. Socket access grants administrative authority over that engine; no world-writable socket, privileged container or host networking is needed. External TCP Docker endpoints are not enabled by this path.
+
+For an existing Compose installation, keep its project name, `.env`, named volumes and certificates; update the Compose file/image and recreate only the application service. Do not use `down -v`. A sibling Gate directory must be beneath the mounted deployment root. Preflight rejects missing tools, inaccessible engines, unwritable/mismatched mounts and unsupported runtimes before copying data.
+
+Gate must embed Tally schema head **13 or newer** and retain the new activity, revision, identity, alias, process, presence, correction and replay tables. Unknown or older target heads fail before writers pause. Gate's installer is a cross-repository dependency: a compatible Gate release and registration are required to verify the final production cutover. Source PostgreSQL/ClickHouse storage and backups are retained; this change does not expand the existing ClickHouse history migration boundary. Do not infer a successful migration from an installer exit code: account/credential/registry verification and final TLS/API/worker health checks must pass.
+
+[Runtime capabilities](specs/runtime-capabilities.json) records the standalone-containerd feasibility result and remaining platform tests. Standalone containerd/nerdctl is unsupported because Gate still relies on Docker-specific installer, Compose, network, health and filesystem contracts. Fully Apple-containerized Tally is also unsupported; native macOS with Apple-managed source databases remains a separate supported source mode. Docker Desktop, arm64 and rootless production cutovers require the live platform matrix before release certification.
+
+If a helper is interrupted, inspect `/data/upgrade/gate-upgrade` and the recorded attempt log, source backup and maintenance markers. Restarting Tally does not resume retired writers. Use the UI's safe retry/cancel/reset paths only when their recorded state permits them; otherwise restore the retained source following the upgrade recovery procedure. Never manually start source writers alongside Gate writers.
+
+### Team validation and development handoff
+
+This branch implements issues [#2](https://github.com/godellabs-ai/godel-tally/issues/2), [#3](https://github.com/godellabs-ai/godel-tally/issues/3) and [#4](https://github.com/godellabs-ai/godel-tally/issues/4). The remaining release acceptance work is live customer connector coverage and a compatible, registered Gate cutover across the platform matrix. Those results are explicitly pending in the capability registers.
+
+Run `make check`, `make compose-check`, `make secret-scan` and `bash scripts/test-deployment.sh`. To exercise the identity lifecycle against PostgreSQL, create a **fresh disposable database** and run:
+
+```bash
+TALLY_DISPOSABLE_POSTGRES_URL=postgres://USER:PASSWORD@HOST:PORT/FRESH_TEST_DB \
+  cargo test --workspace --all-features --test identity_inventory -- --ignored --nocapture
+```
+
+This test covers source association/revision conflicts, idempotent usage, no-MDM inventory, authoritative directory aliases, shared owner roles across repeated complete snapshots, process ID reuse, source retirement, installation isolation, replay/restart, correction/undo and deletion. MDM HTTP fixtures verify method, pagination/continuation boundaries and source projection; they are separate from live verification.
+
+For the Docker executor lifecycle test, build the runtime stage and run:
+
+```bash
+docker build --target runtime -f deploy/compose/Dockerfile.tallyd -t tally-upgrade-runtime-test .
+python3 scripts/test-upgrade-container-executor.py
+```
+
+The development lab uses isolated PostgreSQL on `15433`, ClickHouse on `18124`, LiteLLM on `14500` and Ollama on `11435`. Tally listens on HTTP loopback `127.0.0.1:12357` behind a managed HTTPS proxy on port 443. Use the current public URL in the ignored `.local/handoff-runtime/accounts.json`; the internal port is not a public URL. The host services are `tally-handoff.service` and `tally-handoff-proxy.service`, with proxy configuration in `/etc/tally-handoff-proxy/nginx.conf`. The trusted IP certificate is renewed by `tally-handoff-certificate.timer`; renewal reloads the proxy. Both administrator/member sign-in and external retrieval of the public sign-in page were verified.
+
+The lab contains actual completed local model calls, registered administrator/member accounts and source-reported identities. It contains no fabricated live EDR/MDM/proxy events. Machine-private runtime settings, generated account passwords, browser evidence and logs are under the ignored `.local/handoff-runtime/`; model/gateway settings and actual request receipts are under `.local/live-lab/`. Keep `tally.env` and its secret key stable when restarting. Restart only this lab instance with `sudo systemctl restart tally-handoff.service` (or its private `restart.py` helper). Credentials, certificates and databases are intentionally absent from Git.
+
+Before release, connect each source with a read-only customer account and validate initial sync, continuation, credential rotation, empty/partial sync, identity role/tenant boundaries, actual model versus alias, field coverage and paused/deleted sources. Verify the finding drawer against individual raw vendor record IDs. Exercise NAT/DHCP/IPv6/shared-device uncertainty and out-of-order evidence with the team's sanitized fixtures. Keep unknown process/model/actor fields unknown when the source cannot establish them.
+
+Dependency audit note (2026-10-24): npm audit is clean after the transitive Zod update. `cargo deny` flags **RUSTSEC-2026-0387** in the existing `crypto-bigint 0.5.5` dependency brought by AWS SigV4a/P-256. The published AWS signer still includes the affected legacy dependency; this branch adds no advisory waiver. Resolve the upstream dependency path before release. The secret scanner allowlist contains only known synthetic fixture values.
 
 ## Status and contributing
 

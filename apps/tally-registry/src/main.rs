@@ -1180,7 +1180,7 @@ mod tests {
 
     #[test]
     fn corrupted_checked_artifact_is_rejected() {
-        let (bundle_path, manifest_path) = checked_release("2026.08.5");
+        let (bundle_path, manifest_path) = checked_release("2026.10.1");
         let mut compressed = fs::read(bundle_path).expect("checked bundle");
         let midpoint = compressed.len() / 2;
         compressed[midpoint] ^= 0x01;
@@ -1201,7 +1201,7 @@ mod tests {
                 .expect("candidate JSON"),
         )
         .expect("candidate fixture");
-        let (bundle, manifest) = checked_release("2026.08.5");
+        let (bundle, manifest) = checked_release("2026.10.1");
 
         export_candidate(&input_path, &first_output, &bundle, &manifest, true)
             .expect("first export");
@@ -1242,7 +1242,7 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let input_path = temporary.path().join("input.json");
         let output_path = temporary.path().join("proposal.json");
-        let (bundle, manifest) = checked_release("2026.08.5");
+        let (bundle, manifest) = checked_release("2026.10.1");
 
         fs::write(
             &input_path,

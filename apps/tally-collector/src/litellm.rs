@@ -84,6 +84,8 @@ struct LitellmSpendMetadata {
 #[derive(Default, Deserialize)]
 struct LitellmRequestContext {
     #[serde(default)]
+    device_id: Option<String>,
+    #[serde(default)]
     source_hostname: Option<String>,
     #[serde(default)]
     agent_id: Option<String>,
@@ -93,6 +95,8 @@ struct LitellmRequestContext {
 
 #[derive(Default, Deserialize)]
 struct LitellmAttributionHeaders {
+    #[serde(default, rename = "x-tally-device-id")]
+    device_id: Option<String>,
     #[serde(default, rename = "user-agent")]
     user_agent: Option<String>,
     #[serde(default, rename = "x-tally-source-hostname")]
@@ -118,6 +122,9 @@ struct LitellmProjectionGroup {
 
 #[derive(Serialize)]
 struct LitellmProjectionUsage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_id: Option<String>,
+    user_role: tally_core::IdentityRole,
     request_id: String,
     provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -396,14 +403,43 @@ fn project_usage(
     let request_id = bounded_text(Some(record.request_id), 2_048)?;
     let (source_hostname, request_client) =
         project_client_metadata(&metadata, record.agent_id, record.request_tags.as_deref());
-    let user = [
-        record.end_user,
-        metadata.user_api_key_user_email,
-        record.user,
-        metadata.user_api_key_user_id,
+    let end_user = bounded_text(record.end_user, 512);
+    let user_role = if end_user.is_some() {
+        tally_core::IdentityRole::RequestActor
+    } else {
+        tally_core::IdentityRole::KeyOwner
+    };
+    let user = end_user.or_else(|| {
+        [
+            metadata.user_api_key_user_email.clone(),
+            record.user.clone(),
+            metadata.user_api_key_user_id.clone(),
+        ]
+        .into_iter()
+        .find_map(|v| bounded_text(v, 512))
+    });
+    let device_id = [
+        metadata.spend_logs_metadata.as_ref(),
+        metadata.requester_metadata.as_ref(),
+        metadata.proxy_server_request.as_ref(),
     ]
     .into_iter()
-    .find_map(|value| bounded_text(value, 512));
+    .flatten()
+    .find_map(|context| {
+        context.device_id.as_deref().or_else(|| {
+            context
+                .headers
+                .as_ref()
+                .and_then(|h| h.device_id.as_deref())
+        })
+    })
+    .filter(|v| {
+        !v.is_empty()
+            && v.len() <= 256
+            && v.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':'))
+    })
+    .map(str::to_owned);
     // Only source-native IP fields are accepted. Host, X-Forwarded-For and arbitrary headers
     // cannot establish a trustworthy client address and must never be promoted to source IP.
     let requester_ip_address = [record.requester_ip_address, metadata.requester_ip_address]
@@ -412,6 +448,8 @@ fn project_usage(
         .find_map(|value| value.parse::<IpAddr>().ok().map(|ip| ip.to_string()));
     let destination_url = record.api_base.and_then(|value| sanitized_origin(&value));
     Some(LitellmProjectionUsage {
+        device_id,
+        user_role,
         request_id,
         provider,
         model: Some(model),
