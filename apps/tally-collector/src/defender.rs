@@ -34,6 +34,17 @@ struct DefenderProjection {
 
 #[derive(Serialize)]
 struct DefenderProjectionEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    directory_object_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    directory_device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    os_platform: Option<String>,
+    event_table: String,
     id: String,
     observed_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,6 +61,20 @@ struct DefenderProjectionEvent {
     remote_ip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     remote_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_unique_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_process_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_started_at: Option<DateTime<Utc>>,
 }
 
 pub(crate) struct DefenderPullOutcome {
@@ -168,7 +193,7 @@ pub(crate) async fn pull_defender_network_events(
 
 fn defender_network_query(limit: usize) -> String {
     format!(
-        "DeviceNetworkEvents\n| project Timestamp, ReportId, DeviceId, DeviceName, InitiatingProcessAccountUpn, InitiatingProcessAccountName, ActionType, RemoteUrl, RemoteIP, RemotePort\n| order by Timestamp asc\n| take {limit}"
+        "union (DeviceNetworkEvents | project Timestamp, ReportId, DeviceId, DeviceName, InitiatingProcessAccountUpn, InitiatingProcessAccountName, InitiatingProcessAccountDomain, InitiatingProcessAccountObjectId, ActionType, RemoteUrl, RemoteIP, RemotePort, LocalIP, LocalPort, Protocol, InitiatingProcessFileName, InitiatingProcessId, InitiatingProcessCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessUniqueId=tostring(column_ifexists(\"InitiatingProcessUniqueId\", \"\")), EventTable=\"DeviceNetworkEvents\"), (DeviceInfo | project Timestamp, ReportId, DeviceId, DeviceName, AadDeviceId, OSPlatform, EventTable=\"DeviceInfo\")\n| order by Timestamp asc\n| take {limit}"
     )
 }
 
@@ -185,7 +210,7 @@ fn project_row(
     }
     let device_id = bounded_field(row, &["DeviceId", "deviceId"], 512);
     let hostname = bounded_field(row, &["DeviceName", "deviceName"], 512);
-    let user_id = bounded_field(
+    let mut user_id = bounded_field(
         row,
         &[
             "InitiatingProcessAccountUpn",
@@ -195,6 +220,16 @@ fn project_row(
         ],
         512,
     );
+    if let Some(user) = user_id.as_mut()
+        && !user.contains(['@', '\\'])
+        && let Some(scope) = bounded_field(
+            row,
+            &["InitiatingProcessAccountDomain", "DeviceId", "DeviceName"],
+            512,
+        )
+    {
+        *user = format!("{scope}\\{user}");
+    }
     let action_type = bounded_field(row, &["ActionType", "actionType"], 256);
     let remote_url = bounded_field(row, &["RemoteUrl", "remoteUrl"], 2_048);
     let remote_ip = bounded_field(row, &["RemoteIP", "remoteIP", "remoteIp"], 64);
@@ -218,6 +253,13 @@ fn project_row(
         hex::encode(digest)
     });
     Some(DefenderProjectionEvent {
+        directory_object_id: bounded_field(row, &["InitiatingProcessAccountObjectId"], 64),
+        source_port: integer_field(row, &["LocalPort"]).and_then(|v| v.try_into().ok()),
+        protocol: bounded_field(row, &["Protocol"], 16),
+        directory_device_id: bounded_field(row, &["AadDeviceId"], 64),
+        os_platform: bounded_field(row, &["OSPlatform"], 128),
+        event_table: bounded_field(row, &["EventTable"], 64)
+            .unwrap_or_else(|| "DeviceNetworkEvents".into()),
         id,
         observed_at,
         device_id,
@@ -227,6 +269,15 @@ fn project_row(
         remote_url,
         remote_ip,
         remote_port,
+        source_ip: bounded_field(row, &["LocalIP"], 64),
+        file_name: bounded_field(row, &["InitiatingProcessFileName"], 128),
+        process_id: integer_field(row, &["InitiatingProcessId"]).map(|v| v.to_string()),
+        process_started_at: field(row, &["InitiatingProcessCreationTime"])
+            .and_then(|v| v.parse().ok()),
+        process_unique_id: bounded_field(row, &["InitiatingProcessUniqueId"], 128),
+        parent_file_name: bounded_field(row, &["InitiatingProcessParentFileName"], 128),
+        parent_process_id: integer_field(row, &["InitiatingProcessParentId"])
+            .map(|v| v.to_string()),
     })
 }
 
@@ -274,12 +325,16 @@ mod tests {
     #[test]
     fn hunting_query_is_bounded_and_projects_only_attribution_fields() {
         let query = defender_network_query(501);
-        assert!(query.starts_with("DeviceNetworkEvents"));
+        assert!(query.contains("DeviceNetworkEvents"));
+        assert!(query.contains("DeviceInfo"));
+        assert!(query.contains("AadDeviceId"));
         assert!(query.contains("InitiatingProcessAccountUpn"));
         assert!(query.contains("RemoteUrl"));
         assert!(query.ends_with("take 501"));
         assert!(!query.contains("ProcessCommandLine"));
-        assert!(!query.contains("FileName"));
+        assert!(query.contains("InitiatingProcessFileName"));
+        assert!(query.contains("LocalIP"));
+        assert!(query.contains("InitiatingProcessCreationTime"));
     }
 
     #[test]

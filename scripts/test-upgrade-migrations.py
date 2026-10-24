@@ -53,11 +53,12 @@ def run_fixture(root, case, source_head, gate_head, body, **extra_env):
 def check_versions():
     cases = [
         ("equal", "18", "18", False, False, True),
+        ("inventory-target-too-old", "13", "12", False, False, False),
         ("older", "16", "18", True, False, True),
         ("newer", "18", "17", True, True, True),
-        ("missing-head", "18", None, True, False, True),
-        ("invalid-head", "18", "17; DROP TABLE findings", True, False, True),
-        ("empty-source-head", "", "18", True, False, True),
+        ("missing-head", "18", None, False, False, False),
+        ("invalid-head", "18", "17; DROP TABLE findings", False, False, False),
+        ("empty-source-head", "", "18", False, False, False),
         ("source-query-failed", "18", "17", False, False, False),
         ("archive-failed", "18", "17", True, True, False),
     ]

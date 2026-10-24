@@ -1,5 +1,9 @@
 //! Connector SDK, deterministic admission batches, and privacy-safe file import foundations.
 
+mod mdm;
+pub use mdm::{
+    DeviceSnapshot, InventoryUser, MdmProvider, MdmSnapshot, import_mdm_json, valid_mdm_origin,
+};
 mod cato;
 mod managed_agents;
 pub use managed_agents::{

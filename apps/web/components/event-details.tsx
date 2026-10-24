@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { FindingActivity } from "./finding-activity";
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, ChevronDown, Copy, Globe, Laptop, Plug, ShieldCheck, ShieldQuestion, ShieldX, UserRound } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
@@ -45,7 +47,7 @@ function EventDetailsBody({ row, onInvestigate }: { row: EventRow; onInvestigate
     </div>
     <div className="custom-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
       <section data-drawer-section="Overview" className="grid gap-3 sm:grid-cols-2" aria-label="Activity overview">
-        <Summary icon={UserRound} label="Person" value={person ?? "Not identified"} secondary={e.actor?.identity?.source_subject_kind === "source_user_id" && !e.actor.identity.email ? "Source user ID" : undefined}/>
+        <Summary icon={UserRound} label={e.inventory?.user_role ? eventLabel(e.inventory.user_role) : "Source identity"} value={person ?? "Not identified"} secondary={e.actor?.identity?.source_subject_kind === "source_user_id" && !e.actor.identity.email ? "Source user ID" : undefined}/>
         <Summary icon={Laptop} label="Endpoint" value={e.actor?.hostname ?? ips[0] ?? "Not reported"} secondary={e.actor?.hostname ? ips.join(" · ") : undefined}/>
         <Summary icon={Bot} label="AI provider / model" value={providers.join(", ") || "Provider not identified"} secondary={models.join(", ") || "Model not reported"}/>
         <Summary icon={Plug} label="Connector" value={row.connector} secondary={connectorTypeLabel(e.connector.connector_type)}/>
@@ -60,6 +62,12 @@ function EventDetailsBody({ row, onInvestigate }: { row: EventRow; onInvestigate
         <dl>{field("Person", person, false, true)}{field("Source user ID", e.actor?.identity?.source_subject !== person ? e.actor?.identity?.source_subject : undefined)}{field("Identity source", e.actor?.identity?.authority ? eventLabel(e.actor.identity.authority) : undefined)}{field("Hostname", e.actor?.hostname, true, true)}{field("Source IP", ips.join(", ") || undefined, true, true)}{field("Device reference", e.actor?.device_key, true)}</dl>
         <div className="mt-3 flex flex-wrap gap-2">{person ? <Pivot label="Person activity" value={person} onInvestigate={onInvestigate}/> : null}{e.actor?.hostname || ips[0] ? <Pivot label="Endpoint activity" value={e.actor?.hostname ?? ips[0]} onInvestigate={onInvestigate}/> : null}</div>
       </Section>
+      <Section title="Process & attribution">
+        <dl>{field("Executable",e.process?.executable,true,true)}{field("Process ID",e.process?.pid,true)}{field("Native process ID",e.process?.unique_id,true)}{field("Process started",e.process?.started_at ? formatDateTime(e.process.started_at) : undefined)}{field("Parent executable",e.process?.parent_executable,true)}{field("Parent process ID",e.process?.parent_pid,true)}{field("Parent native ID",e.process?.parent_unique_id,true)}{field("User role",e.inventory?.user_role ? eventLabel(e.inventory.user_role) : "Source-reported association")}</dl>
+        <p className="mt-2 text-xs text-muted-foreground">Client hints and assigned owners do not establish the initiating executable or request actor.</p>
+        {e.actor?.hostname && <Link href={`/inventory?q=${encodeURIComponent(e.actor.hostname)}`} className="mt-2 block text-xs text-primary underline">View device inventory</Link>}
+      </Section>
+      {row.findings[0] && <section data-drawer-section="Linked attribution"><FindingActivity findingId={row.findings[0].finding_id} observationId={e.observation_id}/></section>}
       <Section title="AI service & destination">
         <dl>{field("Provider", providers.join(", ") || undefined, false, true)}{field("Model", models.join(", ") || undefined, false, true)}{field("Reported model ID", e.service?.declared_model_id, true)}{field("Destination hostname", e.destination?.host ?? e.service?.tls_server_name, true, true)}{field("Destination IP", e.destination?.ip, true)}{field("Destination port", e.destination?.port ?? e.network?.destination_port)}{field("Service path", e.destination?.path_prefix, true)}{field("Application", e.service?.vendor_application_id)}</dl>
         {destination ? <div className="mt-3"><Pivot label="Destination activity" value={destination} onInvestigate={onInvestigate}/></div> : null}

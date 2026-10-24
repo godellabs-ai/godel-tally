@@ -57,7 +57,7 @@ export function EstateOverview({ flow, records, loading, error, refresh, loadMor
   </div>;
 }
 
-export function ConnectorOverview({ initialStatus = "all" }: { initialStatus?: EventAuthorizationStatus }) {
+export function ConnectorOverview({ initialStatus = "all", initialQuery = "" }: { initialStatus?: EventAuthorizationStatus; initialQuery?: string }) {
   const inventory = useEstateInventory();
   const findings = useGovernanceFindings();
   const user = useCurrentUser();
@@ -80,7 +80,7 @@ export function ConnectorOverview({ initialStatus = "all" }: { initialStatus?: E
       onAuthorizationNodeClick={value => setStatus(value === "Sanctioned" ? "sanctioned" : value === "Unsanctioned" ? "unsanctioned" : "authorization_queue")}
       error={<>{inventory.error ? <p role="alert" className="text-sm text-destructive">{inventory.error}</p> : null}{findings.error ? <p role="alert" className="text-sm text-destructive">{findings.error} <button type="button" className="underline" onClick={() => void findings.refresh()}>Retry</button></p> : null}</>}/>
     <section id="findings" aria-label="Overview findings" className="min-w-0 scroll-mt-20 space-y-3">
-      <EventStream refreshToken={eventRefresh} status={status} onStatusChange={setStatus}/>
+      <EventStream initialQuery={initialQuery} refreshToken={eventRefresh} status={status} onStatusChange={setStatus}/>
     </section>
   </div>;
 }

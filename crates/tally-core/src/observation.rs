@@ -7,7 +7,7 @@ use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::OBSERVATION_SCHEMA_VERSION;
+use crate::{InventoryObservation, OBSERVATION_SCHEMA_VERSION, ProcessObservation};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Observation {
@@ -36,6 +36,10 @@ pub struct Observation {
     pub outcome: OutcomeObservation,
     #[serde(default, skip_serializing_if = "AgentObservation::is_empty")]
     pub agent: AgentObservation,
+    #[serde(default, skip_serializing_if = "ProcessObservation::is_empty")]
+    pub process: ProcessObservation,
+    #[serde(default, skip_serializing_if = "InventoryObservation::is_empty")]
+    pub inventory: InventoryObservation,
     pub source: EvidenceReceipt,
 }
 
@@ -64,6 +68,8 @@ impl Observation {
             workload: WorkloadObservation::default(),
             outcome: OutcomeObservation::default(),
             agent: AgentObservation::default(),
+            process: ProcessObservation::default(),
+            inventory: InventoryObservation::default(),
             source,
         }
     }
@@ -188,11 +194,19 @@ impl RequestClientKind {
                 }
             })
             .collect::<Vec<_>>();
-        clients
+        let mut products = clients
             .iter()
             .copied()
-            .find(|client| !matches!(client, Self::OpenaiPython | Self::OpenaiNode | Self::Curl))
-            .or_else(|| clients.first().copied())
+            .filter(|client| !matches!(client, Self::OpenaiPython | Self::OpenaiNode | Self::Curl));
+        if let Some(first) = products.next() {
+            // Conflicting product claims stay unknown; an SDK token can accompany a product.
+            return products.all(|client| client == first).then_some(first);
+        }
+        let first = clients.first().copied()?;
+        clients
+            .iter()
+            .all(|client| *client == first)
+            .then_some(first)
     }
 }
 
@@ -696,6 +710,12 @@ mod tests {
             ("secret=LangChain/1.0", None),
             ("NotLangChain/1.0", None),
             ("LangChain/1.0\nsecret", None),
+            ("claude-code/1.0 codex/1.0", None),
+            ("curl/8.0 openai-node/3.0", None),
+            (
+                "claude-code/1.0 claude-code/1.0",
+                Some(RequestClientKind::ClaudeCode),
+            ),
         ] {
             assert_eq!(RequestClientKind::from_user_agent(value), expected);
             if let Some(client) = expected {

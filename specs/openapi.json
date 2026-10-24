@@ -46,6 +46,19 @@
         }
       }
     },
+    "/api/v1/tally/connectors/capabilities": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "capabilities",
+        "responses": {
+          "200": {
+            "description": "Connector evidence boundaries and observed field coverage"
+          }
+        }
+      }
+    },
     "/api/v1/tally/connectors/schedules": {
       "post": {
         "tags": [],
@@ -676,6 +689,30 @@
         }
       }
     },
+    "/api/v1/tally/findings/{finding_id}/activity": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "activity",
+        "parameters": [
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated source-associated finding activities"
+          }
+        }
+      }
+    },
     "/api/v1/tally/health/live": {
       "get": {
         "tags": [],
@@ -824,6 +861,66 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/tally/inventory": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "inventory",
+        "responses": {
+          "200": {
+            "description": "Source-evidenced device and user inventory"
+          }
+        }
+      }
+    },
+    "/api/v1/tally/inventory/corrections": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "correct",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Correction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Reversible identity correction"
+          }
+        }
+      }
+    },
+    "/api/v1/tally/inventory/corrections/{correction_id}/undo": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "undo",
+        "parameters": [
+          {
+            "name": "correction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Undo an identity correction"
           }
         }
       }
@@ -1281,6 +1378,51 @@
             ]
           }
         }
+      },
+      "AddressObservation": {
+        "type": "object",
+        "required": [
+          "address",
+          "role",
+          "valid_from"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/IpAddress"
+          },
+          "network_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/AddressRole"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddressRole": {
+        "type": "string",
+        "enum": [
+          "observed_source",
+          "local_interface",
+          "public_egress",
+          "proxy",
+          "warp",
+          "unknown"
+        ]
       },
       "AgentObservation": {
         "type": "object",
@@ -1870,6 +2012,41 @@
       },
       "ConnectorScheduleSourceInput": {
         "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "provider",
+              "base_url",
+              "tenant_id",
+              "source_kind"
+            ],
+            "properties": {
+              "api_token": {
+                "type": "string"
+              },
+              "base_url": {
+                "type": "string"
+              },
+              "client_id": {
+                "type": "string"
+              },
+              "client_secret": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/components/schemas/MdmProvider"
+              },
+              "source_kind": {
+                "type": "string",
+                "enum": [
+                  "mdm_inventory"
+                ]
+              },
+              "tenant_id": {
+                "type": "string"
+              }
+            }
+          },
           {
             "type": "object",
             "required": [
@@ -2637,6 +2814,28 @@
           }
         }
       },
+      "Correction": {
+        "type": "object",
+        "required": [
+          "subject_id",
+          "target_id",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "DataInventory": {
         "type": "object",
         "required": [
@@ -2824,6 +3023,14 @@
             "minimum": 0
           }
         }
+      },
+      "DeviceIdentifierKind": {
+        "type": "string",
+        "enum": [
+          "source_native",
+          "client_supplied",
+          "hostname_alias"
+        ]
       },
       "DigestAlgorithm": {
         "type": "string",
@@ -3490,6 +3697,22 @@
           }
         }
       },
+      "IdentityRole": {
+        "type": "string",
+        "enum": [
+          "associated_user",
+          "request_actor",
+          "process_account",
+          "assigned_owner",
+          "primary_user",
+          "enrolled_by",
+          "last_logged_in",
+          "service_principal",
+          "cloud_principal",
+          "creator",
+          "key_owner"
+        ]
+      },
       "IdentitySubjectKind": {
         "type": "string",
         "enum": [
@@ -3500,6 +3723,10 @@
       "ImportAdapterInput": {
         "type": "string",
         "enum": [
+          "iru_inventory",
+          "addigy_inventory",
+          "intune_inventory",
+          "jamf_inventory",
           "defender_stream",
           "servicenow_agents",
           "n8n_agents",
@@ -3864,6 +4091,106 @@
           }
         }
       },
+      "InventoryIdentifier": {
+        "type": "object",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryObservation": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressObservation"
+            }
+          },
+          "device_key_kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeviceIdentifierKind"
+              }
+            ]
+          },
+          "directory_tenant_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Installation-HMAC directory scope, only when the source identifies the directory tenant."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bounded device display name, separate from a validated hostname/FQDN."
+          },
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryIdentifier"
+            }
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Device report/check-in time, distinct from when an inventory assignment was observed."
+          },
+          "retired": {
+            "type": "boolean"
+          },
+          "snapshot_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Set only by a successfully completed, bounded inventory snapshot."
+          },
+          "user_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdentityRole"
+              }
+            ]
+          },
+          "valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "IpAddress": {
         "type": "string"
       },
@@ -3939,6 +4266,15 @@
               }
             }
           }
+        ]
+      },
+      "MdmProvider": {
+        "type": "string",
+        "enum": [
+          "iru",
+          "addigy",
+          "intune",
+          "jamf"
         ]
       },
       "NetworkObservation": {
@@ -4086,6 +4422,9 @@
             "type": "string",
             "format": "uuid"
           },
+          "inventory": {
+            "$ref": "#/components/schemas/InventoryObservation"
+          },
           "kind": {
             "$ref": "#/components/schemas/ObservationKind"
           },
@@ -4102,6 +4441,9 @@
           },
           "outcome": {
             "$ref": "#/components/schemas/OutcomeObservation"
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessObservation"
           },
           "received_at": {
             "type": "string",
@@ -4188,6 +4530,55 @@
             "type": "string"
           }
         }
+      },
+      "ProcessObservation": {
+        "type": "object",
+        "properties": {
+          "executable": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent_executable": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent_pid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent_unique_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "unique_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "RegistryModelView": {
         "type": "object",

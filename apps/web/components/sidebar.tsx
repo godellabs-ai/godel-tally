@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 const primaryItems = [
   ["Overview", "/", LayoutDashboard],
   ["Connectors", "/connectors", Cable],
+  ["People & devices", "/inventory", Users],
   ["AI Registry", "/registry", Bot],
   ["Upgrade", "/upgrade", ArrowUpCircle],
 ] as const;

@@ -32,7 +32,12 @@ pub async fn run() -> Result<()> {
     let gate_secret = env_value(Path::new(&gate_env), "JWT_SECRET")?;
     let target = SecretCipher::from_host_secret(gate_secret.as_bytes());
     let password = env_value(Path::new(&gate_env), "POSTGRES_PASSWORD")?;
-    let mut url = url::Url::parse(&format!("postgres://ggate@127.0.0.1:{port}/ggate"))?;
+    let mut url = url::Url::parse("postgres://ggate@127.0.0.1/ggate")?;
+    let host = env::var("TALLY_IMPORT_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    url.set_host(Some(&host))
+        .context("invalid Gate import database host")?;
+    url.set_port(Some(port))
+        .map_err(|()| anyhow::anyhow!("invalid Gate database port"))?;
     url.set_password(Some(&password))
         .map_err(|()| anyhow::anyhow!("invalid Gate database password"))?;
     let pool = PgPool::connect(url.as_str())

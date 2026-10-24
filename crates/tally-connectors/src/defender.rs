@@ -53,9 +53,21 @@ struct DefenderEvent {
     #[serde(default)]
     event_table: Option<String>,
     #[serde(default)]
+    directory_device_id: Option<String>,
+    #[serde(default)]
+    os_platform: Option<String>,
+    #[serde(default)]
+    process_started_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    process_unique_id: Option<String>,
+    #[serde(default)]
     directory_object_id: Option<String>,
     #[serde(default)]
     source_ip: Option<String>,
+    #[serde(default)]
+    source_port: Option<u16>,
+    #[serde(default)]
+    protocol: Option<String>,
     #[serde(default)]
     remote_url: Option<String>,
     #[serde(default)]
@@ -96,6 +108,7 @@ pub fn microsoft_defender_edr_api_descriptor() -> ConnectorDescriptor {
             "event ID and timestamp".to_owned(),
             "device ID, hostname, user identity, and action type".to_owned(),
             "remote hostname, IP, and port".to_owned(),
+            "local IP, process executable/PID/creation time and parent executable/PID".to_owned(),
         ],
         prohibited_fields: vec![
             "process command lines, payloads, file hashes, and arbitrary event fields".to_owned(),
@@ -104,7 +117,7 @@ pub fn microsoft_defender_edr_api_descriptor() -> ConnectorDescriptor {
         replay_capability: ReplayCapability::OverlapWindow,
         health_capabilities: vec!["API reachability".to_owned()],
         coverage_capabilities: vec!["endpoint events".to_owned()],
-        privacy_contract: "Retains the source-native user or email, endpoint hostname, pseudonymous device key, and destination network metadata required to locate Shadow AI usage. Process and content fields are discarded.".to_owned(),
+        privacy_contract: "Retains the source-native user or email, endpoint hostname, pseudonymous device key, and destination network metadata required to locate Shadow AI usage. Bounded process basenames, PIDs and creation times are retained; raw command lines and content are discarded.".to_owned(),
     }
 }
 
@@ -223,11 +236,25 @@ pub fn import_microsoft_defender_json(
         observation.received_at = config.received_at;
         observation.saas.tenant_key = Some(tenant_key.clone());
         observation.actor.device_key = device_key;
+        observation.inventory.device_key_kind =
+            Some(tally_core::DeviceIdentifierKind::SourceNative);
         observation.actor.hostname = hostname.map(str::to_owned);
         observation.actor.identity = user_id.map(|subject| IdentityObservation {
-            subject_key: config
-                .pseudonymization_key
-                .pseudonym_exact("identity", subject),
+            subject_key: config.pseudonymization_key.pseudonym_exact(
+                "identity",
+                &if crate::crowdstrike::recognized_email(subject).is_some() {
+                    subject.to_ascii_lowercase()
+                } else {
+                    format!(
+                        "{}:{subject}",
+                        observation
+                            .actor
+                            .device_key
+                            .as_deref()
+                            .unwrap_or(&request_key)
+                    )
+                },
+            ),
             email: crate::crowdstrike::recognized_email(subject),
             source_subject: Some(subject.to_owned()),
             source_subject_kind: Some(IdentitySubjectKind::UserName),
@@ -240,19 +267,97 @@ pub fn import_microsoft_defender_json(
         observation.destination.ip = destination_ip;
         observation.destination.port = event.remote_port;
         observation.network.destination_port = event.remote_port;
+        observation.network.source_port = event.source_port;
+        observation.network.protocol = event
+            .protocol
+            .as_deref()
+            .map(str::to_ascii_lowercase)
+            .filter(|v| ["tcp", "udp", "icmp", "icmpv6"].contains(&v.as_str()));
         observation.service.vendor_application_id = registry_entry_id.map(str::to_owned);
         observation.service.source_category = Some("microsoft_defender_device_network".to_owned());
         observation.outcome.action = action_type.map(str::to_owned);
 
         enrich_agent(&mut observation, &event, config);
-        // Include normalized process metadata in the receipt so a process-only event has stable,
-        // distinct replay identity. Never hash or persist command-line source material.
-        if !observation.agent.is_empty() {
-            let normalized = serde_json::to_vec(&(&digest, &observation.agent))
-                .map_err(|_| VendorImportError::Serialization)?;
+        observation.process = tally_core::ProcessObservation {
+            executable: event
+                .file_name
+                .as_deref()
+                .and_then(tally_core::ProcessObservation::executable_basename),
+            pid: observation.agent.process_id.clone(),
+            unique_id: event
+                .process_unique_id
+                .as_deref()
+                .filter(|v| {
+                    v.len() <= 128
+                        && v.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':'))
+                })
+                .map(str::to_owned),
+            started_at: event.process_started_at,
+            parent_executable: event
+                .parent_file_name
+                .as_deref()
+                .and_then(tally_core::ProcessObservation::executable_basename),
+            parent_pid: observation.agent.parent_process_id.clone(),
+            parent_unique_id: None,
+        };
+        observation.inventory.user_role = Some(tally_core::IdentityRole::ProcessAccount);
+        if let Some(id) = event
+            .directory_device_id
+            .as_deref()
+            .and_then(|v| uuid::Uuid::parse_str(v).ok())
+            .filter(|v| !v.is_nil())
+        {
+            observation
+                .inventory
+                .identifiers
+                .push(tally_core::InventoryIdentifier {
+                    kind: "entra_device_id".into(),
+                    value: id.to_string(),
+                });
+            observation.inventory.directory_tenant_key = Some(
+                config
+                    .pseudonymization_key
+                    .pseudonym_exact("directory_tenant", &projection.customer_ref),
+            );
+        }
+        if let Some(id) = observation.agent.directory_object_id.clone() {
+            if let Some(identity) = observation.actor.identity.as_mut() {
+                identity.directory_key = Some(id);
+            }
+            observation.inventory.directory_tenant_key = Some(
+                config
+                    .pseudonymization_key
+                    .pseudonym_exact("directory_tenant", &projection.customer_ref),
+            );
+        }
+        observation.inventory.os = event
+            .os_platform
+            .as_deref()
+            .filter(|v| v.len() <= 128 && !v.chars().any(char::is_control))
+            .map(str::to_owned);
+        if event.event_table.as_deref() == Some("DeviceInfo") {
+            observation.kind = ObservationKind::NetworkMapping;
+            observation.service.source_category = Some("microsoft_defender_device_info".into());
+            observation.inventory.user_role = None;
+        }
+
+        // Receipts describe projected evidence. Keep the observation identity above unchanged
+        // when process metadata is enriched, so replay cannot add another usage count.
+        if !observation.agent.is_empty()
+            || !observation.process.is_empty()
+            || !observation.inventory.is_empty()
+        {
+            let normalized = serde_json::to_vec(&(
+                &digest,
+                &observation.agent,
+                &observation.process,
+                &observation.inventory,
+                &observation.actor,
+                &observation.network,
+            ))
+            .map_err(|_| VendorImportError::Serialization)?;
             let digest = hex::encode(Sha256::digest(normalized));
-            observation.observation_id =
-                uuid::Uuid::new_v5(&config.connector_instance_id, digest.as_bytes());
             observation.source = EvidenceReceipt::RecordDigest {
                 algorithm: DigestAlgorithm::Sha256,
                 digest,
@@ -458,7 +563,7 @@ pub fn defender_stream_descriptor() -> ConnectorDescriptor {
     descriptor.requested_fields.push("Process filename/command line and parent, OS account, device identity, MCP config basename".into());
     descriptor.prohibited_fields =
         vec!["stored raw command lines, tokens, prompts, file contents".into()];
-    descriptor.privacy_contract = "Command lines are inspected transiently; only recognized process/package signatures are retained. No arbitrary arguments or file contents are stored.".into();
+    descriptor.privacy_contract = "Command lines are inspected transiently for recognized signatures. Bounded executable basenames, scoped native process IDs, process start and parent metadata are retained when supplied. No full paths, arbitrary arguments or file contents are stored.".into();
     descriptor.cursor_semantics =
         "Event Hubs partition checkpoint advances only after Tally acknowledges the batch".into();
     descriptor.replay_capability = ReplayCapability::SourceManagedRetry;
@@ -560,7 +665,7 @@ pub fn import_defender_stream_json(
                 get("ProcessCommandLine")
             },
             parent_file_name: if network {
-                None
+                get("InitiatingProcessParentFileName")
             } else {
                 get("InitiatingProcessFileName")
             },
@@ -575,14 +680,29 @@ pub fn import_defender_stream_json(
                 get("ProcessId")
             },
             parent_process_id: if network {
-                None
+                get("InitiatingProcessParentId")
             } else {
                 get("InitiatingProcessId")
             },
+            process_started_at: get(if network {
+                "InitiatingProcessCreationTime"
+            } else {
+                "ProcessCreationTime"
+            })
+            .and_then(|v| v.parse().ok()),
+            process_unique_id: get(if network {
+                "InitiatingProcessUniqueId"
+            } else {
+                "ProcessUniqueId"
+            }),
+            directory_device_id: get("AadDeviceId"),
+            os_platform: get("OSPlatform"),
             event_table: Some(table.into()),
             directory_object_id: get("AccountObjectId")
                 .or_else(|| get("InitiatingProcessAccountObjectId")),
             source_ip: get("LocalIP"),
+            source_port: get("LocalPort").and_then(|v| v.parse().ok()),
+            protocol: get("Protocol"),
             remote_url: get("RemoteUrl"),
             remote_ip: get("RemoteIP"),
             remote_port: props
@@ -628,6 +748,27 @@ mod tests {
             checkpoint: Cursor("defender:123".to_owned()),
             pseudonymization_key: PseudonymizationKey::new(&[7_u8; 32]).expect("key"),
         }
+    }
+
+    #[test]
+    fn adding_process_context_preserves_the_source_observation_identity() {
+        let input = serde_json::json!({"records":[{"category":"AdvancedHunting-DeviceNetworkEvents","properties":{"Timestamp":"2026-10-07T00:00:00Z","ReportId":12,"DeviceId":"device1","DeviceName":"workstation.example.com","RemoteUrl":"api.openai.com"}}]});
+        let first =
+            import_defender_stream_json(&serde_json::to_vec(&input).unwrap(), &config()).unwrap();
+        let mut enriched = input;
+        enriched["records"][0]["properties"]["InitiatingProcessFileName"] =
+            serde_json::json!("curl");
+        let second =
+            import_defender_stream_json(&serde_json::to_vec(&enriched).unwrap(), &config())
+                .unwrap();
+        assert_eq!(
+            first.batch.observations[0].observation_id,
+            second.batch.observations[0].observation_id
+        );
+        assert_eq!(
+            second.batch.observations[0].process.executable.as_deref(),
+            Some("curl")
+        );
     }
 
     #[test]
@@ -727,6 +868,10 @@ mod tests {
         );
         let serialized = serde_json::to_string(&outcome.batch).expect("serialize");
         assert!(!serialized.contains("evt-1"));
-        assert!(!serialized.contains("malware.exe"));
+        assert_eq!(
+            observation.process.executable.as_deref(),
+            Some("malware.exe")
+        );
+        assert!(observation.agent.key.is_none());
     }
 }

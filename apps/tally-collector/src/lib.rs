@@ -16,11 +16,33 @@
 ///
 /// Returns an error when jobs cannot be leased or completed, the registry cannot be refreshed, an
 /// outbound client cannot be created, or durable connector state cannot be recorded.
+#[allow(clippy::too_many_lines)] // One bounded worker tick maintains inventory and executes due jobs.
 pub async fn run_due_connector_jobs(
     state: &tally_api::AppState,
     lease_owner: Uuid,
     lease_seconds: u16,
 ) -> Result<usize> {
+    let installation = state.postgres.get_or_create_installation_identity().await?;
+    let days = |name: &str, default: u16| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(default)
+    };
+    state
+        .postgres
+        .maintain_identity_history(
+            installation.installation_id,
+            days("TALLY_IDENTITY_HISTORY_RETENTION_DAYS", 365),
+            days("TALLY_AI_LOG_RETENTION_DAYS", 90),
+        )
+        .await?;
+    state
+        .postgres
+        .process_identity_replay()
+        .await
+        .context("re-enrich bounded identity activity page")?;
     let jobs = state
         .postgres
         .lease_due_connector_jobs(lease_owner, Utc::now(), lease_seconds, 4)

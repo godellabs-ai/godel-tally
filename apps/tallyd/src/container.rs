@@ -147,7 +147,18 @@ pub fn run() -> Result<()> {
         for path in [data, &data.join("tls"), cert.parent().unwrap(), &cert, &key] {
             chown(path, Some(65532), Some(65532)).context("set container data ownership")?;
         }
-        setgroups(&[]).context("clear container supplementary groups")?;
+        let mut allowed = Vec::new();
+        if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1") {
+            use std::os::unix::fs::MetadataExt;
+            let endpoint = std::env::var("DOCKER_HOST")
+                .unwrap_or_else(|_| "unix:///var/run/docker.sock".into());
+            if let Some(socket) = endpoint.strip_prefix("unix://")
+                && let Ok(metadata) = fs::metadata(socket)
+            {
+                allowed.push(Gid::from_raw(metadata.gid()));
+            }
+        }
+        setgroups(&allowed).context("retain only the configured Docker socket group")?;
         setgid(Gid::from_raw(65532)).context("drop container group")?;
         setuid(Uid::from_raw(65532)).context("drop container user")?;
     }

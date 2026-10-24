@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+utoipa.workspace = true
 reqwest = { workspace = true, features = ["form", "query"] }
 async-trait.workspace = true
 tally-core.workspace = true

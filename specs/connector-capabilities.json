@@ -1,0 +1,1170 @@
+{
+  "schema_version": "1",
+  "catalog": [
+    {
+      "catalog_id": "iru_inventory",
+      "name": "Iru device inventory",
+      "connector_types": [
+        "iru_inventory_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": "https://api-docs.iru.com/",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/mdm.rs",
+        "normalizer": "crates/tally-connectors/src/mdm.rs",
+        "collection_tests": "apps/tally-collector/src/mdm.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/mdm.rs#tests"
+      },
+      "fields": {
+        "user": "typed associated/assigned/logged-in source relationship; never a request actor",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "not applicable: inventory only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "iru_inventory_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment",
+      "compatibility": "Kandji US/EU tenant API list + per-device details; device-family optional fields may be absent."
+    },
+    {
+      "catalog_id": "addigy_inventory",
+      "name": "Addigy device inventory",
+      "connector_types": [
+        "addigy_inventory_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": "https://api.addigy.com/api/v2/documentation/",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/mdm.rs",
+        "normalizer": "crates/tally-connectors/src/mdm.rs",
+        "collection_tests": "apps/tally-collector/src/mdm.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/mdm.rs#tests"
+      },
+      "fields": {
+        "user": "typed associated/assigned/logged-in source relationship; never a request actor",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "not applicable: inventory only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "addigy_inventory_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment",
+      "compatibility": "API v2 read-only POST device search with x-api-key, org scope, paginated selected facts. identity_users supports bounded string lists; other shapes stay unavailable."
+    },
+    {
+      "catalog_id": "intune_inventory",
+      "name": "Microsoft Intune inventory",
+      "connector_types": [
+        "intune_inventory_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": "https://learn.microsoft.com/en-us/graph/api/resources/intune-devices-manageddevice?view=graph-rest-1.0",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/mdm.rs",
+        "normalizer": "crates/tally-connectors/src/mdm.rs",
+        "collection_tests": "apps/tally-collector/src/mdm.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/mdm.rs#tests"
+      },
+      "fields": {
+        "user": "typed associated/assigned/logged-in source relationship; never a request actor",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "not applicable: inventory only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "intune_inventory_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment",
+      "compatibility": "Graph v1.0 managedDevices; application DeviceManagementManagedDevices.Read.All and licensed tenant. No beta/current-IP promise."
+    },
+    {
+      "catalog_id": "jamf_inventory",
+      "name": "Jamf Platform inventory",
+      "connector_types": [
+        "jamf_inventory_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": "https://developer.jamf.com/platform-api/reference/get_v4-computers-inventory-1",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/mdm.rs",
+        "normalizer": "crates/tally-connectors/src/mdm.rs",
+        "collection_tests": "apps/tally-collector/src/mdm.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/mdm.rs#tests"
+      },
+      "fields": {
+        "user": "typed associated/assigned/logged-in source relationship; never a request actor",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "not applicable: inventory only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "jamf_inventory_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment",
+      "compatibility": "Jamf Platform regional v4, tenant header, devices:read. Classic/on-prem Jamf Pro endpoints are not enabled."
+    },
+    {
+      "catalog_id": "gemini_agents",
+      "name": "Gemini AI Studio Managed Agents",
+      "connector_types": [
+        "gemini_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "gemini_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "claude_agents",
+      "name": "Claude Managed Agents",
+      "connector_types": [
+        "claude_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "claude_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "openai_agents",
+      "name": "OpenAI Agents",
+      "connector_types": [
+        "openai_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "openai_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "servicenow_agents",
+      "name": "ServiceNow AI Agents",
+      "connector_types": [
+        "servicenow_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "servicenow_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "n8n_agents",
+      "name": "n8n AI workflows",
+      "connector_types": [
+        "n8n_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "n8n_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "copilot_studio_agents",
+      "name": "Microsoft Copilot Studio",
+      "connector_types": [
+        "copilot_studio_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "copilot_studio_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "langgraph_agents",
+      "name": "LangSmith / LangGraph agents",
+      "connector_types": [
+        "langgraph_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "langgraph_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "dify_agents",
+      "name": "Dify AI applications",
+      "connector_types": [
+        "dify_agents_api_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/managed_agents.rs",
+        "normalizer": "crates/tally-connectors/src/managed_agents.rs",
+        "collection_tests": "apps/tally-collector/src/managed_agents.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/managed_agents.rs#tests"
+      },
+      "fields": {
+        "user": "ServiceNow sys_created_by is creator; other sources have no request actor",
+        "device": "platform/project/environment/app scope; no physical endpoint",
+        "process": "unavailable",
+        "agent": "saved agent/workflow/application ID and bounded name",
+        "model": "literal configured model only; no invocation inferred"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "dify_agents_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "defender_stream",
+      "name": "Defender event stream",
+      "connector_types": [
+        "microsoft_defender_stream_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": "https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-schema-tables",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/lib.rs",
+        "normalizer": "crates/tally-connectors/src/defender.rs",
+        "collection_tests": "apps/tally-collector/src/lib.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/defender.rs#tests"
+      },
+      "fields": {
+        "user": "source process account; source-local usernames remain device-scoped",
+        "device": "source-reported scoped identifiers where present",
+        "process": "basename/PID/native process key/start/parent when the selected event supplies them",
+        "agent": "versioned executable signature, separate from HTTP client hint",
+        "model": "unavailable from DNS/network/process events"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "microsoft_defender_stream_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "aws_bedrock",
+      "name": "AWS Bedrock & SageMaker",
+      "connector_types": [
+        "aws_managed_ai_inventory_api_v1",
+        "aws_managed_ai_inventory_file_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/aws.rs",
+        "normalizer": "crates/tally-connectors/src/cloud.rs",
+        "collection_tests": "apps/tally-collector/src/aws.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/cloud.rs#tests"
+      },
+      "fields": {
+        "user": "AWS IAM principal; not an employee",
+        "device": "explicit source IP plus cloud resource/workload scope; no person inference",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "explicit invocation model, separate from deployment/resource inventory"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "aws_managed_ai_inventory_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "aws_managed_ai_inventory_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "aws_vpc_flow_logs",
+      "name": "AWS VPC Flow Logs",
+      "connector_types": [
+        "aws_vpc_flow_api_v1",
+        "aws_vpc_flow_fixture_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "DNS and flows do not establish an executable, employee, completed request, or exact model.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/aws.rs",
+        "normalizer": "crates/tally-connectors/src/flow.rs",
+        "collection_tests": "apps/tally-collector/src/aws.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/flow.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable",
+        "device": "source tuple and scoped network mapping only",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "aws_vpc_flow_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "aws_vpc_flow_fixture_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "azure_vnet_flow_logs",
+      "name": "Azure VNet Flow Logs",
+      "connector_types": [
+        "azure_vnet_flow_api_v1",
+        "azure_vnet_flow_fixture_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "DNS and flows do not establish an executable, employee, completed request, or exact model.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/azure.rs",
+        "normalizer": "crates/tally-connectors/src/flow.rs",
+        "collection_tests": "apps/tally-collector/src/azure.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/flow.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable",
+        "device": "source tuple and scoped network mapping only",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "azure_vnet_flow_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "azure_vnet_flow_fixture_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "gcp_vpc_flow_logs",
+      "name": "Google Cloud VPC Flow Logs",
+      "connector_types": [
+        "gcp_vpc_flow_api_v1",
+        "gcp_vpc_flow_fixture_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "DNS and flows do not establish an executable, employee, completed request, or exact model.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/gcp.rs",
+        "normalizer": "crates/tally-connectors/src/flow.rs",
+        "collection_tests": "apps/tally-collector/src/gcp.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/flow.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable",
+        "device": "source tuple and scoped network mapping only",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "gcp_vpc_flow_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "gcp_vpc_flow_fixture_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "azure_openai",
+      "name": "Azure OpenAI & Foundry",
+      "connector_types": [
+        "azure_managed_ai_inventory_api_v1",
+        "azure_managed_ai_inventory_file_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/azure.rs",
+        "normalizer": "crates/tally-connectors/src/cloud.rs",
+        "collection_tests": "apps/tally-collector/src/azure.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/cloud.rs#tests"
+      },
+      "fields": {
+        "user": "Entra caller/service principal",
+        "device": "explicit source IP plus cloud resource/workload scope; no person inference",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "explicit invocation model, separate from deployment/resource inventory"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "azure_managed_ai_inventory_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "azure_managed_ai_inventory_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "gcp_vertex",
+      "name": "Google Vertex AI",
+      "connector_types": [
+        "gcp_vertex_ai_inventory_api_v1",
+        "gcp_vertex_ai_inventory_file_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/gcp.rs",
+        "normalizer": "crates/tally-connectors/src/cloud.rs",
+        "collection_tests": "apps/tally-collector/src/gcp.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/cloud.rs#tests"
+      },
+      "fields": {
+        "user": "Google principal/service account",
+        "device": "explicit source IP plus cloud resource/workload scope; no person inference",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "explicit invocation model, separate from deployment/resource inventory"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "gcp_vertex_ai_inventory_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "gcp_vertex_ai_inventory_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "ai_gateway",
+      "name": "Cloudflare AI Gateway",
+      "connector_types": [
+        "cloudflare_ai_gateway_api_v1",
+        "cloudflare_ai_gateway_file_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/cloudflare.rs",
+        "normalizer": "crates/tally-connectors/src/gateway.rs",
+        "collection_tests": "apps/tally-collector/src/cloudflare.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/gateway.rs#tests"
+      },
+      "fields": {
+        "user": "explicit end user; API key owner retained as key_owner",
+        "device": "explicit supplied metadata is client-reported; IP is not a device",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "per-request supplied upstream model/reference; inventory aliases are configured"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "cloudflare_ai_gateway_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "cloudflare_ai_gateway_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "litellm",
+      "name": "LiteLLM Router Gateway",
+      "connector_types": [
+        "litellm_model_groups_api_v1",
+        "litellm_model_groups_file_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": "https://docs.litellm.ai/docs/proxy/cost_tracking",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/litellm.rs",
+        "normalizer": "crates/tally-connectors/src/gateway.rs",
+        "collection_tests": "apps/tally-collector/src/litellm.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/gateway.rs#tests"
+      },
+      "fields": {
+        "user": "explicit end user; API key owner retained as key_owner",
+        "device": "explicit supplied metadata is client-reported; IP is not a device",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "per-request supplied upstream model/reference; inventory aliases are configured"
+      },
+      "client_hint": "bounded allowlist from User-Agent; forgeable, never executable proof",
+      "transports": [
+        {
+          "connector_type": "litellm_model_groups_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "litellm_model_groups_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment",
+      "local_live_verification": {
+        "date": "2026-10-24",
+        "source": "real LiteLLM gateway with PostgreSQL spend logs and two local Ollama models",
+        "scope": "request polling, two test end users, model references, bounded curl client hint and explicit client-supplied device metadata; external vendor telemetry not exercised"
+      }
+    },
+    {
+      "catalog_id": "rapid7_edr",
+      "name": "Rapid7 EDR",
+      "connector_types": [
+        "rapid7_edr_insightidr_api_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "Selected InsightIDR DNS Query dataset only. Network/process expansion needs a separately verified product dataset and permissions.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/security_logs.rs",
+        "normalizer": "crates/tally-connectors/src/vendor/security_logs.rs",
+        "collection_tests": "apps/tally-collector/src/security_logs.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor/security_logs.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "rapid7_edr_insightidr_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "netskope",
+      "name": "Netskope",
+      "connector_types": [
+        "netskope_events_api_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Selected page/application event projection only. No endpoint executable or exact model is inferred from app/domain labels.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/security_logs.rs",
+        "normalizer": "crates/tally-connectors/src/vendor/security_logs.rs",
+        "collection_tests": "apps/tally-collector/src/security_logs.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor/security_logs.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "netskope_events_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "crowdstrike_edr",
+      "name": "CrowdStrike Falcon EDR",
+      "connector_types": [
+        "crowdstrike_edr_ngsiem_api_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "DNS and flows do not establish an executable, employee, completed request, or exact model.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/crowdstrike.rs",
+        "normalizer": "crates/tally-connectors/src/crowdstrike.rs",
+        "collection_tests": "apps/tally-collector/src/crowdstrike.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/crowdstrike.rs#tests"
+      },
+      "fields": {
+        "user": "source process account; source-local usernames remain device-scoped",
+        "device": "source-reported scoped identifiers where present",
+        "process": "basename/PID/native process key/start/parent when the selected event supplies them",
+        "agent": "versioned executable signature, separate from HTTP client hint",
+        "model": "unavailable from DNS/network/process events"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "crowdstrike_edr_ngsiem_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "zscaler",
+      "name": "Zscaler ZIA / NSS",
+      "connector_types": [
+        "zscaler_zia_nss_web_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/lib.rs",
+        "normalizer": "crates/tally-connectors/src/vendor.rs",
+        "collection_tests": "apps/tally-collector/src/lib.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "bounded allowlist from User-Agent; forgeable, never executable proof",
+      "transports": [
+        {
+          "connector_type": "zscaler_zia_nss_web_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "zt_gateway",
+      "name": "Cloudflare Zero Trust Gateway",
+      "connector_types": [
+        "cloudflare_zero_trust_gateway_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": "https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/account/gateway_http/",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/cloudflare.rs",
+        "normalizer": "crates/tally-connectors/src/vendor.rs",
+        "collection_tests": "apps/tally-collector/src/cloudflare.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "bounded allowlist from User-Agent; forgeable, never executable proof",
+      "transports": [
+        {
+          "connector_type": "cloudflare_zero_trust_gateway_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "nextdns",
+      "name": "NextDNS Live Analytics",
+      "connector_types": [
+        "nextdns_logs_api_v1",
+        "nextdns_csv_v1"
+      ],
+      "evidence_family": "network",
+      "boundary": "DNS and flows do not establish an executable, employee, completed request, or exact model.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/nextdns.rs",
+        "normalizer": "crates/tally-connectors/src/vendor.rs",
+        "collection_tests": "apps/tally-collector/src/nextdns.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "nextdns_logs_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "nextdns_csv_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "palo_alto",
+      "name": "Palo Alto Networks",
+      "connector_types": [
+        "palo_alto_strata_https_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/lib.rs",
+        "normalizer": "crates/tally-connectors/src/vendor.rs",
+        "collection_tests": "apps/tally-collector/src/lib.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/vendor.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "bounded allowlist from User-Agent; forgeable, never executable proof",
+      "transports": [
+        {
+          "connector_type": "palo_alto_strata_https_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "casb_api",
+      "name": "Cloudflare CASB",
+      "connector_types": [
+        "cloudflare_casb_integrations_api_v1",
+        "cloudflare_casb_integrations_file_v1"
+      ],
+      "evidence_family": "capability",
+      "boundary": "Capability/status metadata is not user execution evidence.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/cloudflare.rs",
+        "normalizer": "crates/tally-connectors/src/enterprise.rs",
+        "collection_tests": "apps/tally-collector/src/cloudflare.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/enterprise.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable",
+        "device": "integration/account scope",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "not applicable: capability only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "cloudflare_casb_integrations_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "cloudflare_casb_integrations_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "kubernetes",
+      "name": "Kubernetes Cluster Discovery",
+      "connector_types": [
+        "kubernetes_api_discovery_pull_v1",
+        "kubernetes_api_discovery_file_v1"
+      ],
+      "evidence_family": "inventory",
+      "boundary": "Configuration or inventory is not execution. Assigned owners and creators are not request actors.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/kubernetes.rs",
+        "normalizer": "crates/tally-connectors/src/enterprise.rs",
+        "collection_tests": "apps/tally-collector/src/kubernetes.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/enterprise.rs#tests"
+      },
+      "fields": {
+        "user": "unavailable unless explicit source identity",
+        "device": "cluster/namespace/workload/image identity; not a physical device",
+        "process": "unavailable",
+        "agent": "runtime image/workload evidence only",
+        "model": "runtime configured model only"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "kubernetes_api_discovery_pull_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        },
+        {
+          "connector_type": "kubernetes_api_discovery_file_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "microsoft_defender",
+      "name": "Microsoft Defender EDR",
+      "connector_types": [
+        "microsoft_defender_edr_api_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": "https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-devicenetworkevents-table",
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/defender.rs",
+        "normalizer": "crates/tally-connectors/src/defender.rs",
+        "collection_tests": "apps/tally-collector/src/defender.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/defender.rs#tests"
+      },
+      "fields": {
+        "user": "source process account; source-local usernames remain device-scoped",
+        "device": "source-reported scoped identifiers where present",
+        "process": "basename/PID/native process key/start/parent when the selected event supplies them",
+        "agent": "versioned executable signature, separate from HTTP client hint",
+        "model": "unavailable from DNS/network/process events"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "microsoft_defender_edr_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    },
+    {
+      "catalog_id": "cato_networks",
+      "name": "Cato Networks",
+      "connector_types": [
+        "cato_networks_api_v1"
+      ],
+      "evidence_family": "request_metadata",
+      "boundary": "Only explicit source fields establish model/process identity. HTTP client hints can be forged.",
+      "source_contract": null,
+      "live_verification": "pending_customer_environment",
+      "transports_require_separate_verification": true,
+      "implementation": {
+        "collector": "apps/tally-collector/src/cato.rs",
+        "normalizer": "crates/tally-connectors/src/cato.rs",
+        "collection_tests": "apps/tally-collector/src/cato.rs#tests",
+        "projection_tests": "crates/tally-connectors/src/cato.rs#tests"
+      },
+      "fields": {
+        "user": "SDP source identity or explicitly inferred User Awareness identity",
+        "device": "source-reported scoped identifiers where present",
+        "process": "unavailable",
+        "agent": "unavailable",
+        "model": "unavailable"
+      },
+      "client_hint": "unavailable in current selected dataset unless separately supplied",
+      "transports": [
+        {
+          "connector_type": "cato_networks_api_v1",
+          "status": "implemented; fixture/static verification; live smoke pending"
+        }
+      ],
+      "live_smoke_prerequisite": "Customer read-only tenant credentials and representative sanitized telemetry; unavailable in this development environment"
+    }
+  ],
+  "additional_surfaces": [
+    {
+      "surface": "generic_dns_file",
+      "normalizer": "crates/tally-connectors/src/lib.rs",
+      "collector": "apps/tally-collector/src/lib.rs",
+      "boundary": "CSV and NDJSON import; DNS-only evidence",
+      "live_verification": "pending_customer_environment"
+    },
+    {
+      "surface": "cloudflare_dns_logpush",
+      "normalizer": "crates/tally-connectors/src/vendor.rs",
+      "collector": "apps/tally-collector/src/s3_logpush.rs",
+      "boundary": "S3/push DNS metadata; no caller/process/model",
+      "live_verification": "pending_customer_environment"
+    },
+    {
+      "surface": "cloudflare_http_network_logpush",
+      "normalizer": "crates/tally-connectors/src/vendor.rs",
+      "collector": "apps/tally-collector/src/s3_logpush.rs",
+      "boundary": "HTTP and network-session variants retain distinct event tuples and identity semantics",
+      "live_verification": "pending_customer_environment"
+    },
+    {
+      "surface": "cloud_network_mapping",
+      "normalizer": "crates/tally-connectors/src/flow.rs",
+      "collector": "apps/tally-collector/src/lib.rs",
+      "boundary": "AWS/Azure/GCP API and file mappings; no invocation evidence",
+      "live_verification": "pending_customer_environment"
+    },
+    {
+      "surface": "native_runtime_scanner",
+      "normalizer": "crates/tally-scanner/src/lib.rs",
+      "collector": "crates/tally-scanner/src/lib.rs",
+      "boundary": "Authorized scoped runtime inventory; no employee/model invocation inferred",
+      "live_verification": "pending_customer_environment"
+    },
+    {
+      "surface": "purview",
+      "normalizer": "crates/tally-connectors/src/purview.rs",
+      "collector": null,
+      "boundary": "Classification/catalog helper; not a connection event feed",
+      "live_verification": "pending_customer_environment"
+    }
+  ],
+  "verification_note": "Static contracts and fixtures are not live vendor certification. Query /api/v1/tally/connectors/capabilities for observed runtime field coverage."
+}

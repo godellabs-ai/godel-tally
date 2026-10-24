@@ -28,6 +28,7 @@ import {
   type GovernanceFinding,
   type GovernanceFindingsResponse,
 } from "../lib/tally";
+import { FindingActivity } from "./finding-activity";
 import { formatDateTime } from "../lib/datetime";
 
 export type FindingsView = "unsanctioned" | "authorization" | "sanctioned";
@@ -391,6 +392,7 @@ function FindingDetails({ item, open, showNavigation, canWrite, pending, decisio
             </div>
           ) : null}
 
+          <FindingActivity key={current.finding_id} findingId={current.finding_id} />
           <DetailSection icon={Monitor} title="Endpoints" navigation={showNavigation}>{current.endpoints.length ? current.endpoints.map((endpoint) => <DetailRow key={`${endpoint.endpoint_host_id}-${endpoint.role}-${endpoint.port ?? 0}`} primary={formatHost(endpoint)} secondary={`${endpoint.role.replaceAll("_", " ")} · ${endpoint.kind.replace("_", " ")}`} />) : <EmptyDetail text="No source device or local AI service host was supplied by the connectors that observed this usage." />}</DetailSection>
           <DetailSection icon={MapPin} title="Destinations" navigation={showNavigation}>{current.destinations.length ? current.destinations.map((destination) => <DetailRow key={`${destination.destination_host_id}-${destination.port ?? 0}`} primary={formatHost(destination)} secondary={`Remote service · ${destination.kind.replace("_", " ")}`} />) : <EmptyDetail text="No remote service destination was supplied by the connectors that observed this usage." />}</DetailSection>
           <DetailSection icon={UserRound} title="Users" navigation={showNavigation}>{current.users.length ? current.users.map((user) => <DetailRow key={user.endpoint_user_id} primary={user.email ?? user.value} secondary={`${user.kind.replaceAll("_", " ")} · Last seen ${formatDateTime(user.last_seen)}`} />) : <EmptyDetail text="No user data was supplied by the connectors that observed this usage." />}</DetailSection>

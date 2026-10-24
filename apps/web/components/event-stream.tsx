@@ -15,9 +15,10 @@ const defaults = { q: "", window: "all", kind: "", connector_id: "", outcome: ""
 const selectClass = "h-9 min-w-0 rounded-md border border-border bg-card px-2 text-xs text-foreground";
 
 
-export function EventStream({ refreshToken = 0, status, onStatusChange }: { refreshToken?: number; status: EventAuthorizationStatus; onStatusChange: (status: EventAuthorizationStatus) => void }) {
-  const [draft, setDraft] = useState(defaults);
-  const [request, setRequest] = useState({ filters: defaults, status, page: 1, size: 100, sort: "newest", revision: 0 });
+export function EventStream({ refreshToken = 0, status, onStatusChange, initialQuery = "" }: { refreshToken?: number; status: EventAuthorizationStatus; onStatusChange: (status: EventAuthorizationStatus) => void; initialQuery?: string }) {
+  const initialFilters = { ...defaults, q: initialQuery };
+  const [draft, setDraft] = useState(initialFilters);
+  const [request, setRequest] = useState({ filters: initialFilters, status, page: 1, size: 100, sort: "newest", revision: 0 });
   if (request.status !== status) setRequest({ ...request, status, page: 1, revision: request.revision + 1 });
   const [result, setResult] = useState<{ key: string; data: EventStreamResponse } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);

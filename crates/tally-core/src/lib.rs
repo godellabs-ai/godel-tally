@@ -4,6 +4,11 @@
 //! importantly, the observation contract has no place to put prompt, response, document, message,
 //! source-code, clipboard, or request-body content.
 
+mod activity;
+pub use activity::{
+    ActivityAttribution, AddressObservation, AddressRole, AttributionBasis, DeviceIdentifierKind,
+    FieldEvidence, IdentityRole, InventoryIdentifier, InventoryObservation, ProcessObservation,
+};
 mod attribution;
 mod claim;
 mod entity;

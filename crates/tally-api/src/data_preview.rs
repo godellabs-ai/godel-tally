@@ -43,6 +43,7 @@ impl DataTarget {
 }
 
 #[utoipa::path(post,path="/api/v1/tally/data/preview",request_body=DataTarget,responses((status=200,body=DataInventory),(status=422,body=ProblemDetails)))]
+#[allow(clippy::too_many_lines)] // Compute all scoped preview counts without mutating any store.
 pub(crate) async fn preview(
     axum::extract::State(state): axum::extract::State<AppState>,
     Json(target): Json<DataTarget>,
@@ -59,7 +60,18 @@ pub(crate) async fn preview(
             result.ai_logs = logs;
         }
         if target.has("inventory") {
-            result.inventory_entities = nodes;
+            let installation = state
+                .postgres
+                .get_or_create_installation_identity()
+                .await
+                .map_err(ApiError::dependency)?
+                .installation_id;
+            result.inventory_entities = nodes
+                + state
+                    .postgres
+                    .identity_inventory_count(installation, target.before)
+                    .await
+                    .map_err(ApiError::dependency)?;
         }
     }
     let pool = state.postgres.pool();

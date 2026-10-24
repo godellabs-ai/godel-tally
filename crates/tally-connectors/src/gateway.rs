@@ -83,6 +83,10 @@ struct LitellmModelGroupRecord {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LitellmUsageRecord {
+    #[serde(default)]
+    device_id: Option<String>,
+    #[serde(default)]
+    user_role: Option<tally_core::IdentityRole>,
     request_id: String,
     provider: String,
     #[serde(default)]
@@ -102,6 +106,10 @@ struct LitellmUsageRecord {
 
 #[derive(Serialize)]
 struct CanonicalLitellmUsage<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_role: Option<&'a tally_core::IdentityRole>,
     tenant_key: &'a str,
     request_key: &'a str,
     provider_id: &'a str,
@@ -871,7 +879,21 @@ fn litellm_usage_observation(
         "litellm_request",
         &format!("{tenant_key}:{}", usage.request_id),
     );
+    if usage.device_id.as_deref().is_some_and(|v| {
+        v.is_empty()
+            || v.len() > 256
+            || !v
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':'))
+    }) {
+        return Err(VendorImportError::InvalidField {
+            row,
+            field: "device_id",
+        });
+    }
     let canonical = CanonicalLitellmUsage {
+        device_id: usage.device_id.as_deref(),
+        user_role: usage.user_role.as_ref(),
         tenant_key,
         request_key: &request_key,
         provider_id: &provider_id,
@@ -890,6 +912,8 @@ fn litellm_usage_observation(
     let identity_digest = canonical_digest(&CanonicalLitellmUsage {
         source_hostname: None,
         request_client: None,
+        device_id: None,
+        user_role: None,
         ..canonical
     })?;
     let mut observation = base_observation(
@@ -916,6 +940,13 @@ fn litellm_usage_observation(
         observation.cloud.provider = Some(CloudProvider::Azure);
         observation.cloud.provider_service = Some(CloudProviderService::AzureOpenai);
     }
+    observation.inventory.device_key_kind = Some(tally_core::DeviceIdentifierKind::ClientSupplied);
+    observation.actor.device_key = usage.device_id.as_ref().map(|id| {
+        config
+            .pseudonymization_key
+            .pseudonym_exact("litellm_device", &format!("{tenant_key}:{id}"))
+    });
+    observation.inventory.user_role.clone_from(&usage.user_role);
     observation.actor.source_ip = source_ip;
     observation.actor.hostname = source_hostname.map(|host| host.as_str().to_owned());
     observation

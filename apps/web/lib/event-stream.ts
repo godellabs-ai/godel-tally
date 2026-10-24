@@ -18,6 +18,8 @@ export interface EventObservation {
   network?: { protocol?: string; source_port?: number; destination_port?: number; bytes_sent?: number; bytes_received?: number; request_count?: number; direction?: string };
   cloud?: { provider?: string; provider_service?: string; region?: string; resource_kind?: string; lifecycle_state?: string; usage_kind?: string };
   workload?: EventWorkload;
+  process?: { executable?: string; pid?: string; unique_id?: string; started_at?: string; parent_executable?: string; parent_pid?: string; parent_unique_id?: string };
+  inventory?: { user_role?: string; device_key_kind?: string };
   agent?: { name?: string; platform?: string; kind?: string; process_id?: string; parent_name?: string; attribution_confidence?: string; attribution_basis?: string };
   saas?: { capability_state?: string; sanction_status?: string };
   outcome?: { action?: string; result?: string; response_code?: string };
@@ -63,7 +65,7 @@ export const eventPerson = (event: EventObservation) => event.actor?.identity?.e
 export const sourceAddresses = (event: EventObservation) => unique([event.actor?.source_ip, ...(event.actor?.additional_source_ips ?? [])]);
 export const eventDestination = (event: EventObservation) => event.destination?.host ?? event.service?.tls_server_name ?? event.destination?.ip;
 export const eventProviders = (row: EventRow) => unique(row.findings.map(f => f.provider.name));
-export const eventModels = (row: EventRow) => unique([...row.findings.map(f => f.model?.name), ...(!row.findings.some(f => f.model) ? [row.event.service?.declared_model_id] : [])]);
+export const eventModels = (row: EventRow) => row.event.kind === "network_flow" && !row.event.service?.declared_model_id ? [] : unique([...row.findings.map(f => f.model?.name), ...(!row.findings.some(f => f.model) ? [row.event.service?.declared_model_id] : [])]);
 export function eventActivity(row: EventRow) {
   const event = row.event;
   if (["cloud_resource", "kubernetes_resource", "scan_fingerprint", "saas_capability", "network_mapping", "registry_pull", "connector_health"].includes(event.kind)) return eventLabel(event.kind);

@@ -61,6 +61,7 @@ mod gcp;
 mod kubernetes;
 mod litellm;
 mod managed_agents;
+mod mdm;
 mod nextdns;
 mod provider;
 mod pull_support;
@@ -520,6 +521,10 @@ struct ReceiverArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum VendorAdapter {
+    IruInventory,
+    AddigyInventory,
+    IntuneInventory,
+    JamfInventory,
     DefenderStream,
     ServicenowAgents,
     N8nAgents,
@@ -593,6 +598,10 @@ impl PushAdapter {
 impl VendorAdapter {
     const fn key(self) -> &'static str {
         match self {
+            Self::IruInventory => "iru_inventory",
+            Self::AddigyInventory => "addigy_inventory",
+            Self::IntuneInventory => "intune_inventory",
+            Self::JamfInventory => "jamf_inventory",
             Self::DefenderStream => "defender_stream",
             Self::ServicenowAgents => "servicenow_agents",
             Self::N8nAgents => "n8n_agents",
@@ -647,6 +656,10 @@ impl VendorAdapter {
 
     fn from_key(value: &str) -> Option<Self> {
         match value {
+            "iru_inventory" => Some(Self::IruInventory),
+            "addigy_inventory" => Some(Self::AddigyInventory),
+            "intune_inventory" => Some(Self::IntuneInventory),
+            "jamf_inventory" => Some(Self::JamfInventory),
             "defender_stream" => Some(Self::DefenderStream),
             "servicenow_agents" => Some(Self::ServicenowAgents),
             "n8n_agents" => Some(Self::N8nAgents),
@@ -702,6 +715,10 @@ impl VendorAdapter {
 
     fn descriptor(self) -> ConnectorDescriptor {
         match self {
+            Self::IruInventory => tally_connectors::MdmProvider::Iru.descriptor(),
+            Self::AddigyInventory => tally_connectors::MdmProvider::Addigy.descriptor(),
+            Self::IntuneInventory => tally_connectors::MdmProvider::Intune.descriptor(),
+            Self::JamfInventory => tally_connectors::MdmProvider::Jamf.descriptor(),
             Self::DefenderStream => tally_connectors::defender_stream_descriptor(),
             Self::ServicenowAgents => tally_connectors::managed_agents_descriptor("servicenow"),
             Self::N8nAgents => tally_connectors::managed_agents_descriptor("n8n"),
@@ -770,6 +787,28 @@ impl VendorAdapter {
             | Self::DifyAgents => {
                 tally_connectors::import_managed_agents_json(input, config).map_err(Into::into)
             }
+            Self::IruInventory => {
+                tally_connectors::import_mdm_json(input, tally_connectors::MdmProvider::Iru, config)
+                    .map_err(Into::into)
+            }
+            Self::AddigyInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Addigy,
+                config,
+            )
+            .map_err(Into::into),
+            Self::IntuneInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Intune,
+                config,
+            )
+            .map_err(Into::into),
+            Self::JamfInventory => tally_connectors::import_mdm_json(
+                input,
+                tally_connectors::MdmProvider::Jamf,
+                config,
+            )
+            .map_err(Into::into),
             Self::Nextdns => import_nextdns_csv(input, config).map_err(Into::into),
             Self::NextdnsApi => import_nextdns_api_json(input, config).map_err(Into::into),
             Self::CloudflareGateway => {
@@ -2904,6 +2943,7 @@ async fn prepare_scheduled_job(
     // while the lease is held.
     let credentials = JobCredentials::open(cipher, job)?;
     match kind {
+        "mdm_inventory_v1" => mdm::prepare(postgres, &credentials, client, job).await,
         "file_env_v1" => prepare_scheduled_file(postgres, &credentials, job).await,
         "nextdns_api_v1" => prepare_nextdns_api(postgres, &credentials, client, job).await,
         "cloud_api_v1" => prepare_scheduled_cloud(postgres, &credentials, client, job).await,
@@ -4595,6 +4635,21 @@ async fn record_empty_poll(
         .register_connector(job.installation_id, job.connector_instance_id, &descriptor)
         .await
         .context("register empty connector poll")?;
+    if job
+        .config_refs
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        == Some("mdm_inventory_v1")
+    {
+        let at = cursor_after
+            .strip_prefix("mdm-v1:")
+            .and_then(|v| v.parse().ok())
+            .and_then(DateTime::from_timestamp_millis)
+            .context("invalid inventory snapshot checkpoint")?;
+        postgres
+            .complete_inventory_snapshot(job.installation_id, job.connector_instance_id, at, &[])
+            .await?;
+    }
     postgres
         .record_connector_run(&ConnectorRunRecord {
             run_id: Uuid::now_v7(),

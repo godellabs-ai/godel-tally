@@ -80,6 +80,61 @@ async fn check_gate_host() -> Result<(), ApiError> {
             ));
         }
     }
+    if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1") {
+        let deployment = std::env::var("TALLY_DEPLOYMENT_ROOT").map_err(|_| {
+            ApiError::bad_request(
+                "Configure a host-visible TALLY_DEPLOYMENT_ROOT bind mount before upgrading.",
+            )
+        })?;
+        let root = Path::new(&deployment);
+        if !root.is_absolute() || !root.is_dir() {
+            return Err(ApiError::bad_request(
+                "The deployment root must be an existing absolute host-visible directory.",
+            ));
+        }
+        let probe = root.join(format!(".tally-upgrade-probe-{}", crate::random_token()));
+        fs::write(&probe,b"probe").map_err(|_|ApiError::bad_request("The deployment root is not writable by Tally. Set ownership or an ACL for the configured Tally UID on this deployment directory."))?;
+        fs::remove_file(probe).map_err(|_| ApiError::internal())?;
+        let source = std::env::var("TALLY_UPGRADE_SOURCE_CONTAINER")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .map_err(|_| ApiError::bad_request("Cannot identify the source Tally container."))?;
+        let inspect = Command::new("docker")
+            .args(["inspect", "--format", "{{json .Mounts}}", &source])
+            .output()
+            .await
+            .map_err(|_| ApiError::bad_request("Cannot inspect the source Tally container."))?;
+        let mounts: serde_json::Value = serde_json::from_slice(&inspect.stdout).map_err(|_| {
+            ApiError::bad_request(
+                "The selected Docker engine does not contain this Tally container.",
+            )
+        })?;
+        if !mounts.as_array().is_some_and(|m| {
+            m.iter().any(|m| {
+                m["Type"] == "bind"
+                    && m["Source"] == deployment
+                    && m["Destination"] == deployment
+                    && m["RW"] == true
+            })
+        }) {
+            return Err(ApiError::bad_request(
+                "Bind-mount the deployment root at the same absolute host/container path, writable by Tally.",
+            ));
+        }
+
+        for tool in ["bash", "python3", "curl", "openssl", "pg_dump", "psql"] {
+            if !Command::new("sh")
+                .arg("-c")
+                .arg(format!("command -v {tool} >/dev/null"))
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+            {
+                return Err(ApiError::bad_request(
+                    "The Tally image is missing upgrade tools. Use the published image with upgrade support.",
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -97,7 +152,13 @@ fn runtime_mode(app: &App) -> String {
 fn upgrade_command(app: &App) -> Command {
     let mut command = Command::new("bash");
     command
-        .arg(root().join("scripts/upgrade-tally-to-gate.sh"))
+        .arg(root().join(
+            if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1") {
+                "scripts/upgrade-container-executor.sh"
+            } else {
+                "scripts/upgrade-tally-to-gate.sh"
+            },
+        ))
         .env("TALLY_RUNTIME_MODE", runtime_mode(app))
         .env("TALLY_UPGRADE_TALLY_ROOT", root())
         .env("TALLY_UPGRADE_STATE_DIR", &app.dir)
@@ -154,6 +215,12 @@ fn tally_tls_path(env_name: &str) -> Option<String> {
 }
 
 fn suggested_gate_dir() -> Option<String> {
+    if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1") {
+        return std::env::var("TALLY_DEPLOYMENT_ROOT")
+            .ok()
+            .map(|p| PathBuf::from(p).join("godel-gate").display().to_string());
+    }
+
     let tally_root = root().canonicalize().ok()?;
     Some(
         tally_root
@@ -300,6 +367,25 @@ fn public_input(
 ) -> Result<(String, String), ApiError> {
     let url = final_console_url(&input.final_url)?;
     let dir = Path::new(&input.gate_dir);
+    if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1") {
+        let deployment = std::env::var("TALLY_DEPLOYMENT_ROOT").map_err(|_| {
+            ApiError::bad_request("Configure the host deployment root before upgrading.")
+        })?;
+        if !dir.starts_with(&deployment)
+            || dir == Path::new(&deployment)
+            || dir
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            || dir
+                .ancestors()
+                .any(|p| fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()))
+        {
+            return Err(ApiError::bad_request(
+                "Gate must be installed beneath the configured host deployment root, without symlink or parent-directory traversal.",
+            ));
+        }
+    }
+
     if !dir.is_absolute() {
         return Err(ApiError::bad_request(
             "Enter an absolute Gate install directory path.",
@@ -491,7 +577,41 @@ pub async fn status(State(app): State<App>, headers: HeaderMap) -> Result<Json<V
     let bearer = token(&headers)?;
     session(&mut *app.sessions.lock().await, &bearer)?;
     let dir = job_dir(&app);
-    let current_status = read_file(&dir, "status").unwrap_or_else(|| "not_started".into());
+    let mut current_status = read_file(&dir, "status").unwrap_or_else(|| "not_started".into());
+    let mut detached_busy = false;
+    // A detached executor can outlive this server. Restore busy state after a restart,
+    // and leave an actionable receipt if it was interrupted instead of waiting forever.
+    if std::env::var("TALLY_UPGRADE_CONTAINER_EXECUTION").as_deref() == Ok("1")
+        && matches!(
+            current_status.as_str(),
+            "starting" | "preflight" | "staging" | "copying" | "cutting_over"
+        )
+        && let Some(executor) = read_file(&dir, "executor-container")
+    {
+        let inspection = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            Command::new("docker")
+                .args(["inspect", "--format", "{{.State.Running}}", &executor])
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await;
+        if let Ok(Ok(output)) = inspection {
+            let running =
+                output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true";
+            if !running && !app.execution_busy.load(Ordering::SeqCst) {
+                current_status = if current_status == "cutting_over" {
+                    "cutover_failed"
+                } else {
+                    "failed"
+                }
+                .into();
+                fs::write(dir.join("status"), &current_status).map_err(|_| ApiError::internal())?;
+                fs::write(dir.join("failure_reason"), "The detached upgrade executor was interrupted. Source storage and backups are retained. Review the attempt log and recovery instructions before retrying or resuming writers.").map_err(|_|ApiError::internal())?;
+            }
+            detached_busy = running;
+        }
+    }
     Ok(Json(json!({
         "status": &current_status,
         "available": app.host_upgrade_supported,
@@ -509,7 +629,7 @@ pub async fn status(State(app): State<App>, headers: HeaderMap) -> Result<Json<V
         "migration_warning": read_file(&dir, "migration_warning"),
         "prepare_exit": read_file(&dir, "prepare-exit"),
         "cutover_exit": read_file(&dir, "cutover-exit"),
-        "busy": app.execution_busy.load(Ordering::SeqCst),
+        "busy": detached_busy || app.execution_busy.load(Ordering::SeqCst),
         "failure_reason": known_failure_reason(&dir),
         "cutover_retryable": cutover_retryable(&dir),
         "cutover_stage": read_file(&dir, "cutover_stage"),

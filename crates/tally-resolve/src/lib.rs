@@ -2,6 +2,7 @@
 
 mod cloud;
 mod enterprise;
+pub mod identity;
 mod network;
 mod usage;
 

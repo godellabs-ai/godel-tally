@@ -753,6 +753,7 @@ fn normalize_nextdns_api(
     let protocol = optional_token(record.protocol.as_deref(), row, "protocol")?;
     let status = optional_token(record.status.as_deref(), row, "status")?;
     let safe = SafeRecord {
+        request_client: None,
         observed_at,
         host: Some(host.as_str()),
         destination_ip: None,
@@ -863,6 +864,7 @@ fn normalize_nextdns(
         .filter(|value| !value.trim().is_empty())
         .map(|value| config.pseudonymization_key.pseudonym("device", value));
     let safe = SafeRecord {
+        request_client: None,
         observed_at,
         host: Some(host.as_str()),
         destination_ip: None,
@@ -1027,6 +1029,13 @@ struct CloudflareHttpRecord {
     action_name: Option<String>,
     #[serde(default, rename = "RequestCount", alias = "request_count")]
     request_count: Option<u64>,
+    #[serde(
+        default,
+        rename = "UserAgent",
+        alias = "user_agent",
+        alias = "useragent"
+    )]
+    user_agent: Option<String>,
 }
 
 // Gateway HTTP logs do not report transfer sizes. Network-session Logpush does, and must
@@ -1080,6 +1089,7 @@ fn normalize_cloudflare_session(
 ) -> Result<Option<Observation>, VendorImportError> {
     let protocol = optional_token(record.protocol.as_deref(), row, "Protocol")?;
     let http = CloudflareHttpRecord {
+        user_agent: None,
         tally_source: None,
         datetime: record.session_end_time,
         request_id: Some(format!("network-session:{}", record.session_id)),
@@ -1312,6 +1322,7 @@ fn normalize_cloudflare(
         .map(|value| config.pseudonymization_key.pseudonym("device", value));
     let source_record_id = validate_record_id(record.query_id.as_deref(), row)?;
     let safe = SafeRecord {
+        request_client: None,
         observed_at,
         host: Some(host.as_str()),
         destination_ip: destination_ip.as_ref().map(IpAddress::as_str),
@@ -1359,6 +1370,14 @@ fn normalize_cloudflare_http(
             field: "RequestCount",
         });
     }
+    let request_client = record
+        .user_agent
+        .as_deref()
+        .and_then(tally_core::RequestClientKind::from_user_agent)
+        .map(|name| tally_core::RequestClientObservation {
+            name: Some(name),
+            agent_id: None,
+        });
     let request_count = record.request_count.unwrap_or(1);
     let observed_at = parse_time(record.datetime, row)?;
     let host_value = record
@@ -1407,6 +1426,7 @@ fn normalize_cloudflare_http(
     let (ai_request_evaluated, ai_request, declared_model_id) =
         ai_request_signature(record.url.as_deref(), None, None);
     let safe = SafeRecord {
+        request_client,
         observed_at,
         host: host.as_ref().map(Hostname::as_str),
         destination_ip: destination_ip.as_ref().map(IpAddress::as_str),
@@ -1531,6 +1551,14 @@ fn normalize_zscaler(
     row: usize,
     config: &VendorImportConfig,
 ) -> Result<Option<Observation>, VendorImportError> {
+    let request_client = record
+        .user_agent
+        .as_deref()
+        .and_then(tally_core::RequestClientKind::from_user_agent)
+        .map(|name| tally_core::RequestClientObservation {
+            name: Some(name),
+            agent_id: None,
+        });
     let (ai_request_evaluated, ai_request, declared_model_id) = ai_request_signature(
         record.url.as_deref(),
         record.request_content.as_deref(),
@@ -1586,6 +1614,7 @@ fn normalize_zscaler(
         .map(|value| config.pseudonymization_key.pseudonym("device", value));
     let source_record_id = validate_record_id(record.record_id.as_deref(), row)?;
     let safe = SafeRecord {
+        request_client,
         observed_at,
         host: host.as_ref().map(Hostname::as_str),
         destination_ip: destination_ip.as_ref().map(IpAddress::as_str),
@@ -1709,6 +1738,7 @@ enum PaloAltoRecordInput {
     },
 }
 
+#[allow(clippy::too_many_lines)] // Keep the bounded source projection together.
 fn normalize_palo_alto_input(
     input: PaloAltoRecordInput,
     row: usize,
@@ -1729,11 +1759,20 @@ fn normalize_palo_alto_input(
     normalize_palo_alto(record, row, config)
 }
 
+#[allow(clippy::too_many_lines)] // Keep the bounded source projection together.
 fn normalize_palo_alto(
     record: PaloAltoRecord,
     row: usize,
     config: &VendorImportConfig,
 ) -> Result<Option<Observation>, VendorImportError> {
+    let request_client = record
+        .user_agent
+        .as_deref()
+        .and_then(tally_core::RequestClientKind::from_user_agent)
+        .map(|name| tally_core::RequestClientObservation {
+            name: Some(name),
+            agent_id: None,
+        });
     let (ai_request_evaluated, ai_request, declared_model_id) =
         ai_request_signature(record.url.as_deref(), None, None);
     let source_identity = palo_source_identity(&record);
@@ -1794,6 +1833,7 @@ fn normalize_palo_alto(
     let source_record_id = validate_record_id(record_id.as_deref(), row)?;
     let log_type = optional_token(record.log_type.as_deref(), row, "Type")?;
     let safe = SafeRecord {
+        request_client,
         observed_at,
         host: host.as_ref().map(Hostname::as_str),
         destination_ip: destination_ip.as_ref().map(IpAddress::as_str),
@@ -1910,6 +1950,7 @@ impl<'de> Deserialize<'de> for FlexibleId {
 
 #[derive(Serialize)]
 struct SafeRecord<'a> {
+    request_client: Option<tally_core::RequestClientObservation>,
     observed_at: DateTime<Utc>,
     host: Option<&'a str>,
     destination_ip: Option<&'a str>,
@@ -1936,6 +1977,7 @@ struct SafeRecord<'a> {
     declared_model_id: Option<&'a str>,
 }
 
+#[allow(clippy::too_many_lines)] // Keep the bounded source projection together.
 fn observation_from_safe(
     safe: &SafeRecord<'_>,
     config: &VendorImportConfig,
@@ -1974,6 +2016,41 @@ fn observation_from_safe(
     );
     observation.observation_id = observation_id;
     observation.received_at = config.received_at;
+    for (value, role) in [
+        (safe.source_ip, tally_core::AddressRole::ObservedSource),
+        (
+            safe.alternate_source_ip,
+            if connector_type.contains("cloudflare") {
+                tally_core::AddressRole::Warp
+            } else {
+                tally_core::AddressRole::Unknown
+            },
+        ),
+    ] {
+        if let Some(ip) = value.and_then(|v| IpAddress::parse(v).ok()) {
+            observation
+                .inventory
+                .addresses
+                .push(tally_core::AddressObservation {
+                    address: ip,
+                    role,
+                    valid_from: safe.observed_at,
+                    valid_until: None,
+                    network_key: None,
+                });
+        }
+    }
+    observation.inventory.device_key_kind = Some(
+        if connector_type.starts_with("zscaler") || connector_type.starts_with("palo_alto") {
+            tally_core::DeviceIdentifierKind::HostnameAlias
+        } else {
+            tally_core::DeviceIdentifierKind::SourceNative
+        },
+    );
+    observation
+        .actor
+        .request_client
+        .clone_from(&safe.request_client);
     observation.actor.source_ip = safe
         .source_ip
         .map(IpAddress::parse)
